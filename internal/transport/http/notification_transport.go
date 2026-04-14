@@ -1,53 +1,52 @@
-package httpt
+package handlers
 
 import (
-	"context"
+	"net/http"
 
-	"delayednotifier/internal/entity"
-	"delayednotifier/internal/service"
+	"img-processor/internal/service"
 
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/wb-go/wbf/logger"
 )
 
-type NotifyService interface {
-	Create(ctx context.Context, req CreateNotificationRequest) (*entity.Notification, error)
-	GetStatus(ctx context.Context, id uuid.UUID) (*entity.Notification, error)
-	Cancel(ctx context.Context, id uuid.UUID) error
-}
+const _maxRequestBodySize = 32 << 20
 
-type NotifyHandler struct {
-	svc    *service.NotifyService
+type ImageHandler struct {
+	svc    *service.ProcessorService
 	log    logger.Logger
 	router *gin.Engine
 }
 
-func NewNotifyHandler(
-	svc *service.NotifyService,
+func NewImageHandler(
+	svc *service.ProcessorService,
 	log logger.Logger,
-) *NotifyHandler {
-	h := &NotifyHandler{
+) *ImageHandler {
+	h := &ImageHandler{
 		svc: svc,
 		log: log,
 	}
 
 	router := gin.New()
 
+	router.Use(func(c *gin.Context) {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, _maxRequestBodySize)
+	})
+
 	router.Use(h.requestIDMiddleware())
 	router.Use(h.loggingMiddleware())
+	router.Use(h.corsMiddleware([]string{"*"}))
 	router.Use(gin.Recovery())
 
 	h.router = router
 
-	h.router.LoadHTMLGlob("web/*.html")
-	h.router.Static("/static", "./web")
+	router.Static("/static", "./static")
+	router.LoadHTMLGlob("static/*.html")
 
 	h.setupRoutes()
 
 	return h
 }
 
-func (h *NotifyHandler) Engine() *gin.Engine {
+func (h *ImageHandler) Engine() *gin.Engine {
 	return h.router
 }

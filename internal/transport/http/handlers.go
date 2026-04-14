@@ -1,10 +1,12 @@
 // nolint: revive,staticcheck
-package httpt
+package handlers
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"img-processor/internal/entity"
@@ -13,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// UploadImage handles POST /upload.
 // @Summary Загрузить изображение
 // @Description Загружает изображение на обработку (ресайз, миниатюра, водяной знак)
 // @Tags Image
@@ -26,41 +29,28 @@ import (
 // @Failure 500 {object} ErrorResponse "Внутренняя ошибка"
 // @Router /upload [post]
 func (h *ImageHandler) UploadImage(c *gin.Context) {
-	const op = "transport.httpt.ImageHandler.UploadImage"
+	const op = "handlers.UploadImage"
 	ctx := c.Request.Context()
 
-	// Parse multipart form
 	if err := c.Request.ParseMultipartForm(_maxRequestBodySize); err != nil {
 		h.respondError(c, http.StatusBadRequest, "parse_error", "Failed to parse multipart form", err)
 		return
 	}
 
-	// Get file
-	file, header, err := c.FormFile("image")
+	header, err := c.FormFile("image")
 	if err != nil {
-		if err == http.ErrMissingFile {
+		if errors.Is(err, http.ErrMissingFile) {
 			h.respondError(c, http.StatusBadRequest, "missing_file", "Field 'image' is required", nil)
 			return
 		}
 		h.respondError(c, http.StatusBadRequest, "file_error", "Failed to get file", err)
 		return
 	}
-	defer file.Close()
 
-	// Parse options (optional)
-	var opts *entity.ProcessingOptions
-	if optsStr := c.PostForm("options"); optsStr != "" {
-		// Можно добавить парсинг JSON при необходимости
-		_ = optsStr
-	}
-
-	// Call service
-	serviceReq := service.UploadRequest{
+	resp, err := h.svc.Upload(ctx, service.UploadRequest{
 		File:    header,
-		Options: opts,
-	}
-
-	resp, err := h.svc.Upload(ctx, serviceReq)
+		Options: nil,
+	})
 	if err != nil {
 		h.handleServiceError(c, op, err)
 		return
@@ -70,14 +60,15 @@ func (h *ImageHandler) UploadImage(c *gin.Context) {
 		ID:       resp.ID,
 		Status:   resp.Status,
 		Filename: resp.Filename,
-		Size:     header.Size,
-		Message:  "Image uploaded successfully",
+		Size:     resp.Size,
+		Message:  resp.Message,
 	}
 
 	c.Header("Location", fmt.Sprintf("/image/%s", resp.ID))
 	h.respondJSON(c, http.StatusAccepted, response)
 }
 
+// GetImage handles GET /image/:id.
 // @Summary Получить изображение или статус
 // @Description Возвращает обработанное изображение или статус задачи
 // @Tags Image
@@ -93,9 +84,8 @@ func (h *ImageHandler) UploadImage(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse "Внутренняя ошибка"
 // @Router /image/{id} [get]
 func (h *ImageHandler) GetImage(c *gin.Context) {
-	const op = "transport.httpt.ImageHandler.GetImage"
+	const op = "handlers.GetImage"
 	ctx := c.Request.Context()
-
 	imageID := c.Param("id")
 	if imageID == "" {
 		h.respondError(c, http.StatusBadRequest, "missing_id", "Image ID is required", nil)
@@ -103,45 +93,38 @@ func (h *ImageHandler) GetImage(c *gin.Context) {
 	}
 
 	version := c.DefaultQuery("version", "processed")
-
 	reader, size, ext, err := h.svc.GetImage(ctx, imageID, version)
 	if err != nil {
-		if err == entity.ErrImageNotFound {
-			// Проверяем, не в процессе ли обработка
+		if errors.Is(err, entity.ErrImageNotFound) {
 			task, _ := h.svc.GetStatus(ctx, imageID)
 			if task != nil && !task.Status.IsTerminal() {
-				response := ImageStatusResponse{
+				h.respondJSON(c, http.StatusAccepted, ImageStatusResponse{
 					ID:        task.ImageID,
 					Status:    string(task.Status),
 					Progress:  task.Progress,
 					CreatedAt: task.CreatedAt,
-				}
-				h.respondJSON(c, http.StatusAccepted, response)
+				})
 				return
 			}
-			h.respondError(c, http.StatusNotFound, "not_found", "Image not found", err)
-			return
 		}
 		h.handleServiceError(c, op, err)
 		return
 	}
 	defer reader.Close()
 
-	// Set image headers
-	contentType := contentTypeForExt(ext)
-	c.Header("Content-Type", contentType)
-	c.Header("Content-Length", fmt.Sprintf("%d", size))
+	c.Header("Content-Type", contentTypeForExt(ext))
+	c.Header("Content-Length", strconv.FormatInt(size, 10))
 	c.Header("Cache-Control", "public, max-age=31536000, immutable")
 	c.Header("X-Image-ID", imageID)
 	c.Header("X-Image-Version", version)
 
-	// Stream file
 	c.Stream(func(w io.Writer) bool {
-		_, err := io.Copy(w, reader)
+		_, err = io.Copy(w, reader)
 		return err == nil
 	})
 }
 
+// GetStatus handles GET /image/:id/status.
 // @Summary Получить статус обработки
 // @Description Возвращает текущий статус задачи обработки изображения
 // @Tags Image
@@ -155,9 +138,8 @@ func (h *ImageHandler) GetImage(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse "Внутренняя ошибка"
 // @Router /image/{id}/status [get]
 func (h *ImageHandler) GetStatus(c *gin.Context) {
-	const op = "transport.httpt.ImageHandler.GetStatus"
+	const op = "handlers.GetStatus"
 	ctx := c.Request.Context()
-
 	imageID := c.Param("id")
 	if imageID == "" {
 		h.respondError(c, http.StatusBadRequest, "missing_id", "Image ID is required", nil)
@@ -166,10 +148,6 @@ func (h *ImageHandler) GetStatus(c *gin.Context) {
 
 	task, err := h.svc.GetStatus(ctx, imageID)
 	if err != nil {
-		if err == entity.ErrImageNotFound {
-			h.respondError(c, http.StatusNotFound, "not_found", "Image not found", err)
-			return
-		}
 		h.handleServiceError(c, op, err)
 		return
 	}
@@ -195,6 +173,7 @@ func (h *ImageHandler) GetStatus(c *gin.Context) {
 	h.respondJSON(c, statusCode, response)
 }
 
+// DeleteImage handles DELETE /image/:id.
 // @Summary Удалить изображение
 // @Description Удаляет изображение и все его версии (оригинал, обработанное, миниатюру)
 // @Tags Image
@@ -206,9 +185,8 @@ func (h *ImageHandler) GetStatus(c *gin.Context) {
 // @Failure 500 {object} ErrorResponse "Внутренняя ошибка"
 // @Router /image/{id} [delete]
 func (h *ImageHandler) DeleteImage(c *gin.Context) {
-	const op = "transport.httpt.ImageHandler.DeleteImage"
+	const op = "handlers.DeleteImage"
 	ctx := c.Request.Context()
-
 	imageID := c.Param("id")
 	if imageID == "" {
 		h.respondError(c, http.StatusBadRequest, "missing_id", "Image ID is required", nil)
@@ -216,18 +194,13 @@ func (h *ImageHandler) DeleteImage(c *gin.Context) {
 	}
 
 	if err := h.svc.Delete(ctx, imageID); err != nil {
-		if err == entity.ErrImageNotFound {
-			// Идемпотентность: удаление несуществующего — успех
-			c.Status(http.StatusNoContent)
-			return
-		}
 		h.handleServiceError(c, op, err)
 		return
 	}
-
 	c.Status(http.StatusNoContent)
 }
 
+// Health handles GET /health.
 // @Summary Health check
 // @Description Проверка доступности сервиса
 // @Tags System
@@ -235,29 +208,12 @@ func (h *ImageHandler) DeleteImage(c *gin.Context) {
 // @Success 200 {object} HealthResponse "Сервис доступен"
 // @Router /health [get]
 func (h *ImageHandler) Health(c *gin.Context) {
-	response := HealthResponse{
+	h.respondJSON(c, http.StatusOK, HealthResponse{
 		Status: "ok",
 		Time:   time.Now().Format(time.RFC3339),
-	}
-	h.respondJSON(c, http.StatusOK, response)
+	})
 }
 
-// @Summary Ready check
-// @Description Проверка готовности сервиса (зависимости доступны)
-// @Tags System
-// @Produce json
-// @Success 200 {object} HealthResponse "Сервис готов"
-// @Router /ready [get]
-func (h *ImageHandler) Ready(c *gin.Context) {
-	// Здесь можно добавить проверки: хранилище, воркеры и т.д.
-	response := HealthResponse{
-		Status: "ready",
-		Time:   time.Now().Format(time.RFC3339),
-	}
-	h.respondJSON(c, http.StatusOK, response)
-}
-
-// contentTypeForExt возвращает MIME-тип для расширения
 func contentTypeForExt(ext string) string {
 	switch ext {
 	case "jpg", "jpeg":
@@ -271,4 +227,19 @@ func contentTypeForExt(ext string) string {
 	default:
 		return "application/octet-stream"
 	}
+}
+
+func (h *ImageHandler) respondJSON(c *gin.Context, status int, data any) {
+	c.JSON(status, data)
+}
+
+func (h *ImageHandler) respondError(c *gin.Context, status int, code, message string, err error) {
+	response := ErrorResponse{
+		Error: message,
+		Code:  code,
+	}
+	if err != nil {
+		response.Details = err.Error()
+	}
+	h.respondJSON(c, status, response)
 }

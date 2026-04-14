@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"img-processor/internal/app"
-	"img-processor/internal/config"
+	"net"
 	"os"
 	"os/signal"
 	"runtime/debug"
 	"syscall"
+
+	"img-processor/internal/app"
+	"img-processor/internal/config"
 
 	cleanenvport "github.com/wb-go/wbf/config/cleanenv-port"
 	"github.com/wb-go/wbf/logger"
@@ -24,14 +26,12 @@ func main() {
 
 func run() error {
 	var log logger.Logger
+
 	defer func() {
 		if r := recover(); r != nil {
 			stack := string(debug.Stack())
 			if log != nil {
-				log.Error("PANIC RECOVERED",
-					"panic", r,
-					"stack", stack,
-				)
+				log.Error("PANIC RECOVERED", "panic", r, "stack", stack)
 			} else {
 				fmt.Fprintf(os.Stderr, "PANIC RECOVERED: %v\n%s\n", r, stack)
 			}
@@ -56,7 +56,7 @@ func run() error {
 		"name", cfg.App.Name,
 		"version", cfg.App.Version,
 		"env", cfg.Env,
-		"http_addr", cfg.HTTP.Host+":"+cfg.HTTP.Port,
+		"http_addr", net.JoinHostPort(cfg.HTTP.Host, cfg.HTTP.Port),
 	)
 
 	if appErr := app.Run(ctx, &cfg, log); appErr != nil {

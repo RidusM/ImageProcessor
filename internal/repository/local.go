@@ -10,39 +10,43 @@ import (
 
 	"img-processor/internal/config"
 	"img-processor/internal/entity"
+
 	"github.com/wb-go/wbf/logger"
 )
 
 type localRepository struct {
-	cfg  config.Storage
-	log  logger.Logger
+	cfg   config.Storage
 	paths map[string]string
+	log   logger.Logger
 }
 
 func newLocalRepository(cfg config.Storage, log logger.Logger) (*localRepository, error) {
 	const op = "repository.newLocalRepository"
 
-	if cfg.Path == "" {
-		cfg.Path = "./storage"
+	basePath := cfg.Path
+	if basePath == "" {
+		basePath = "./storage"
 	}
 
 	repo := &localRepository{
 		cfg: cfg,
-		log: log, // будет заменено в app.Run
+		log: log,
 		paths: map[string]string{
-			"originals":  filepath.Join(cfg.Path, "originals"),
-			"processed":  filepath.Join(cfg.Path, "processed"),
-			"thumbnails": filepath.Join(cfg.Path, "thumbnails"),
+			"originals":  filepath.Join(basePath, "originals"),
+			"processed":  filepath.Join(basePath, "processed"),
+			"thumbnails": filepath.Join(basePath, "thumbnails"),
 		},
 	}
 
-	// Создаём директории
-	for _, dir := range repo.paths {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return nil, fmt.Errorf("%s: mkdir %s: %w", op, dir, err)
+	for name, dir := range repo.paths {
+		if err := os.MkdirAll(dir, 0o750); err != nil {
+			return nil, fmt.Errorf("%s: create dir %q: %w", op, name, err)
 		}
 	}
 
+	log.LogAttrs(context.Background(), logger.DebugLevel, "local repository initialized",
+		logger.String("base_path", basePath),
+	)
 	return repo, nil
 }
 
@@ -90,36 +94,33 @@ func (r *localRepository) GetPaths(imageID, ext string) *entity.ImagePaths {
 	}
 }
 
-func (r *localRepository) GetOriginal(ctx context.Context, imageID, ext string) (io.ReadCloser, int64, error) {
+func (r *localRepository) GetOriginal(_ context.Context, imageID, ext string) (io.ReadCloser, int64, error) {
 	const op = "repository.local.GetOriginal"
-	path := r.fullPath("originals", imageID, ext)
-	return r.getFile(ctx, op, path)
+	return r.getFile(op, r.fullPath("originals", imageID, ext))
 }
 
-func (r *localRepository) GetProcessed(ctx context.Context, imageID, ext string) (io.ReadCloser, int64, error) {
+func (r *localRepository) GetProcessed(_ context.Context, imageID, ext string) (io.ReadCloser, int64, error) {
 	const op = "repository.local.GetProcessed"
-	path := r.fullPath("processed", imageID, ext)
-	return r.getFile(ctx, op, path)
+	return r.getFile(op, r.fullPath("processed", imageID, ext))
 }
 
-func (r *localRepository) GetThumbnail(ctx context.Context, imageID, ext string) (io.ReadCloser, int64, error) {
+func (r *localRepository) GetThumbnail(_ context.Context, imageID, ext string) (io.ReadCloser, int64, error) {
 	const op = "repository.local.GetThumbnail"
-	path := r.fullPath("thumbnails", imageID, ext)
-	return r.getFile(ctx, op, path)
+	return r.getFile(op, r.fullPath("thumbnails", imageID, ext))
 }
 
-func (r *localRepository) getFile(ctx context.Context, op, path string) (io.ReadCloser, int64, error) {
+func (r *localRepository) getFile(op, path string) (io.ReadCloser, int64, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, 0, entity.ErrFileNotFound
 		}
-		return nil, 0, fmt.Errorf("%s: open: %w", op, err)
+		return nil, 0, fmt.Errorf("%s: open %q: %w", op, path, err)
 	}
 	info, err := file.Stat()
 	if err != nil {
 		_ = file.Close()
-		return nil, 0, fmt.Errorf("%s: stat: %w", op, err)
+		return nil, 0, fmt.Errorf("%s: stat %q: %w", op, path, err)
 	}
 	return file, info.Size(), nil
 }
@@ -131,16 +132,21 @@ func (r *localRepository) Delete(ctx context.Context, imageID, ext string) error
 		r.fullPath("processed", imageID, ext),
 		r.fullPath("thumbnails", imageID, ext),
 	}
+
 	var lastErr error
 	for _, path := range paths {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			lastErr = fmt.Errorf("%s: remove %s: %w", op, path, err)
+			r.log.LogAttrs(ctx, logger.WarnLevel, "failed to remove file",
+				logger.String("path", path),
+				logger.Any("error", err),
+			)
+			lastErr = fmt.Errorf("%s: remove %q: %w", op, path, err)
 		}
 	}
 	return lastErr
 }
 
-func (r *localRepository) Exists(ctx context.Context, imageID, ext string) (bool, error) {
+func (r *localRepository) Exists(_ context.Context, imageID, ext string) (bool, error) {
 	const op = "repository.local.Exists"
 	path := r.fullPath("processed", imageID, ext)
 	_, err := os.Stat(path)
@@ -148,11 +154,10 @@ func (r *localRepository) Exists(ctx context.Context, imageID, ext string) (bool
 		if os.IsNotExist(err) {
 			return false, nil
 		}
-		return false, fmt.Errorf("%s: stat: %w", op, err)
+		return false, fmt.Errorf("%s: stat %q: %w", op, path, err)
 	}
 	return true, nil
 }
-
 
 func (r *localRepository) fullPath(subdir, imageID, ext string) string {
 	return filepath.Join(r.paths[subdir], imageID+"."+ext)
@@ -164,21 +169,21 @@ func (r *localRepository) tempPath(targetPath string) string {
 	return filepath.Join(dir, fmt.Sprintf(".tmp.%s.%d", base, time.Now().UnixNano()))
 }
 
-func (r *localRepository) saveAtomic(ctx context.Context, targetPath string, src io.Reader) error {
+func (r *localRepository) saveAtomic(_ context.Context, targetPath string, src io.Reader) error {
 	const op = "repository.local.saveAtomic"
-
 	tmpPath := r.tempPath(targetPath)
-	
-	tmpFile, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+
+	tmpFile, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return fmt.Errorf("%s: create temp: %w", op, err)
+		return fmt.Errorf("%s: create temp %q: %w", op, tmpPath, err)
 	}
 
 	if _, err = io.Copy(tmpFile, src); err != nil {
 		_ = tmpFile.Close()
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("%s: copy: %w", op, err)
+		return fmt.Errorf("%s: copy to temp: %w", op, err)
 	}
+
 	if err = tmpFile.Close(); err != nil {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("%s: close temp: %w", op, err)
@@ -186,7 +191,7 @@ func (r *localRepository) saveAtomic(ctx context.Context, targetPath string, src
 
 	if err = os.Rename(tmpPath, targetPath); err != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("%s: rename: %w", op, err)
+		return fmt.Errorf("%s: rename %q -> %q: %w", op, tmpPath, targetPath, err)
 	}
 
 	return nil

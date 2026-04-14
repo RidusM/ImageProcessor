@@ -2,10 +2,8 @@ package processor
 
 import "fmt"
 
-// Option функциональная опция для ImageProcessor
 type Option func(*ImageProcessor)
 
-// MaxWidth устанавливает максимальную ширину для ресайза
 func MaxWidth(width int) Option {
 	return func(p *ImageProcessor) {
 		if width > 0 && width <= 4096 {
@@ -14,7 +12,6 @@ func MaxWidth(width int) Option {
 	}
 }
 
-// ThumbSize устанавливает размер миниатюры
 func ThumbSize(size int) Option {
 	return func(p *ImageProcessor) {
 		if size > 0 && size <= 1000 {
@@ -23,7 +20,6 @@ func ThumbSize(size int) Option {
 	}
 }
 
-// JPEGQuality устанавливает качество JPEG (1-100)
 func JPEGQuality(quality int) Option {
 	return func(p *ImageProcessor) {
 		if quality >= 1 && quality <= 100 {
@@ -32,8 +28,6 @@ func JPEGQuality(quality int) Option {
 	}
 }
 
-// UseBiLinear включает/отключает билинейную интерполяцию при ресайзе
-// true = качественнее, но медленнее; false = быстрее, но менее качественно
 func UseBiLinear(enabled bool) Option {
 	return func(p *ImageProcessor) {
 		p.useBiLinear = enabled

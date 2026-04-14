@@ -11,36 +11,38 @@ import (
 	"image/png"
 	"io"
 	"strings"
-	"time"
 
 	"img-processor/internal/entity"
 
 	"github.com/wb-go/wbf/logger"
 	"golang.org/x/image/draw"
-	"golang.org/x/image/math/fixed"
 )
 
 const (
-	_slowOperationThreshold = 2 * time.Second
-	_defaultJPEGQuality     = 90
-	_defaultMaxWidth        = 1920
-	_defaultThumbSize       = 300
-	_watermarkPadding       = 20
-	_watermarkOpacity       = 128 // 0-255
+	_defaultJPEGQuality = 90
+	_defaultMaxWidth    = 1920
+	_defaultThumbSize   = 300
+	_watermarkPadding   = 20
+	_watermarkOpacity   = 128
+
+	_gifMaxColors  = 256
+	_watermarkW    = 200
+	_watermarkH    = 50
+	_textCharWidth = 7
+	_textPadding   = 5
+	_centerDivisor = 2
 )
 
 type ImageProcessor struct {
-		log logger.Logger
-
-		maxWidth    int
-		thumbSize   int
-		jpegQuality int
-		useBiLinear bool
-	}
+	log         logger.Logger
+	maxWidth    int
+	thumbSize   int
+	jpegQuality int
+	useBiLinear bool
+}
 
 func NewImageProcessor(log logger.Logger, opts ...Option) (*ImageProcessor, error) {
-	const op = "processor.image.NewImageProcessor"
-
+	const op = "processor.NewImageProcessor"
 	p := &ImageProcessor{
 		log:         log,
 		maxWidth:    _defaultMaxWidth,
@@ -52,27 +54,14 @@ func NewImageProcessor(log logger.Logger, opts ...Option) (*ImageProcessor, erro
 	for _, opt := range opts {
 		opt(p)
 	}
-
 	if err := p.validate(); err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-
 	return p, nil
 }
 
 func (p *ImageProcessor) Resize(ctx context.Context, src io.Reader, ext string, maxWidth int) (io.Reader, error) {
-	const op = "processor.image.Resize"
-
-	log := p.log.Ctx(ctx).With("op", op)
-	startTime := time.Now()
-
-	defer p.logSlowOperation(ctx, op, startTime,
-		logger.String("ext", ext),
-		logger.Int("max_width", maxWidth),
-	)
-
-	log.LogAttrs(ctx, logger.DebugLevel, "resize started")
-
+	const op = "processor.Resize"
 	img, err := p.Decode(ctx, src, ext)
 	if err != nil {
 		return nil, fmt.Errorf("%s: decode: %w", op, err)
@@ -80,12 +69,7 @@ func (p *ImageProcessor) Resize(ctx context.Context, src io.Reader, ext string, 
 
 	bounds := img.Bounds()
 	originalWidth := bounds.Dx()
-
 	if originalWidth <= maxWidth {
-		log.LogAttrs(ctx, logger.DebugLevel, "image already small enough",
-			logger.Int("width", originalWidth),
-			logger.Int("max_width", maxWidth),
-		)
 		return p.Encode(ctx, img, ext, p.jpegQuality)
 	}
 
@@ -93,53 +77,17 @@ func (p *ImageProcessor) Resize(ctx context.Context, src io.Reader, ext string, 
 	newWidth := maxWidth
 	newHeight := int(float64(bounds.Dy()) * scale)
 
-	log.LogAttrs(ctx, logger.DebugLevel, "calculating new dimensions",
-		logger.Int("original_width", originalWidth),
-		logger.Int("original_height", bounds.Dy()),
-		logger.Int("new_width", newWidth),
-		logger.Int("new_height", newHeight),
-		logger.Any("scale", scale),
-	)
-
-	var resized image.Image
-	switch img.(type) {
-	case *image.RGBA:
-		resized = image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
-	case *image.NRGBA:
-		resized = image.NewNRGBA(image.Rect(0, 0, newWidth, newHeight))
-	case *image.Gray:
-		resized = image.NewGray(image.Rect(0, 0, newWidth, newHeight))
-	default:
-		resized = image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
-	}
-
+	resized := image.NewNRGBA(image.Rect(0, 0, newWidth, newHeight))
 	var scaler draw.Scaler = draw.BiLinear
 	if !p.useBiLinear {
 		scaler = draw.NearestNeighbor
 	}
-
 	scaler.Scale(resized, resized.Bounds(), img, bounds, draw.Over, nil)
-
-	log.LogAttrs(ctx, logger.DebugLevel, "resize completed",
-		logger.Duration("duration", time.Since(startTime)),
-	)
-
 	return p.Encode(ctx, resized, ext, p.jpegQuality)
 }
 
 func (p *ImageProcessor) CreateThumbnail(ctx context.Context, src io.Reader, ext string, size int) (io.Reader, error) {
-	const op = "processor.image.CreateThumbnail"
-
-	log := p.log.Ctx(ctx).With("op", op)
-	startTime := time.Now()
-
-	defer p.logSlowOperation(ctx, op, startTime,
-		logger.String("ext", ext),
-		logger.Int("thumb_size", size),
-	)
-
-	log.LogAttrs(ctx, logger.DebugLevel, "thumbnail creation started")
-
+	const op = "processor.CreateThumbnail"
 	img, err := p.Decode(ctx, src, ext)
 	if err != nil {
 		return nil, fmt.Errorf("%s: decode: %w", op, err)
@@ -147,8 +95,6 @@ func (p *ImageProcessor) CreateThumbnail(ctx context.Context, src io.Reader, ext
 
 	bounds := img.Bounds()
 	srcW, srcH := bounds.Dx(), bounds.Dy()
-
-	thumb := image.NewRGBA(image.Rect(0, 0, size, size))
 
 	var scale float64
 	if srcW < srcH {
@@ -163,31 +109,21 @@ func (p *ImageProcessor) CreateThumbnail(ctx context.Context, src io.Reader, ext
 	scaled := image.NewRGBA(image.Rect(0, 0, scaledW, scaledH))
 	draw.BiLinear.Scale(scaled, scaled.Bounds(), img, bounds, draw.Over, nil)
 
-	dx := (scaledW - size) / 2
-	dy := (scaledH - size) / 2
+	thumb := image.NewRGBA(image.Rect(0, 0, size, size))
+	dx := (scaledW - size) / _centerDivisor
+	dy := (scaledH - size) / _centerDivisor
 
 	draw.Draw(thumb, thumb.Bounds(), scaled, image.Point{X: dx, Y: dy}, draw.Src)
-
-	log.LogAttrs(ctx, logger.DebugLevel, "thumbnail created",
-		logger.Duration("duration", time.Since(startTime)),
-	)
-
 	return p.Encode(ctx, thumb, ext, p.jpegQuality)
 }
 
-func (p *ImageProcessor) AddWatermark(ctx context.Context, src io.Reader, ext string, watermarkPath string) (io.Reader, error) {
-	const op = "processor.image.AddWatermark"
-
-	log := p.log.Ctx(ctx).With("op", op)
-	startTime := time.Now()
-
-	defer p.logSlowOperation(ctx, op, startTime,
-		logger.String("ext", ext),
-		logger.String("watermark_path", watermarkPath),
-	)
-
-	log.LogAttrs(ctx, logger.DebugLevel, "watermark application started")
-
+func (p *ImageProcessor) AddWatermark(
+	ctx context.Context,
+	src io.Reader,
+	ext string,
+	watermarkPath string,
+) (io.Reader, error) {
+	const op = "processor.AddWatermark"
 	baseImg, err := p.Decode(ctx, src, ext)
 	if err != nil {
 		return nil, fmt.Errorf("%s: decode base: %w", op, err)
@@ -197,65 +133,23 @@ func (p *ImageProcessor) AddWatermark(ctx context.Context, src io.Reader, ext st
 	result := image.NewNRGBA(bounds)
 	draw.Draw(result, bounds, baseImg, bounds.Min, draw.Src)
 
-	wmExt := strings.TrimPrefix(strings.ToLower(extFromPath(watermarkPath)), ".")
+	wmExt := extFromPath(watermarkPath)
 	if isImageExt(wmExt) {
-		wmImg, err := p.loadWatermarkImage(watermarkPath)
-		if err != nil {
-			return nil, fmt.Errorf("%s: load watermark image: %w", op, err)
-		}
-		if err := p.applyImageWatermark(result, wmImg); err != nil {
-			return nil, fmt.Errorf("%s: apply image watermark: %w", op, err)
-		}
+		wmImg := p.loadWatermarkImage(watermarkPath)
+		p.applyImageWatermark(result, wmImg)
 	} else {
 		text := watermarkPath
 		if text == "" {
 			text = "© SAMPLE"
 		}
-		if err := p.applyTextWatermark(result, text); err != nil {
-			return nil, fmt.Errorf("%s: apply text watermark: %w", op, err)
-		}
+		p.applyTextWatermark(result, text)
 	}
-
-	log.LogAttrs(ctx, logger.DebugLevel, "watermark applied",
-		logger.Duration("duration", time.Since(startTime)),
-	)
 
 	return p.Encode(ctx, result, ext, p.jpegQuality)
 }
 
-func (p *ImageProcessor) ConvertFormat(ctx context.Context, src io.Reader, srcExt, dstExt string, quality int) (io.Reader, error) {
-	const op = "processor.image.ConvertFormat"
-
-	log := p.log.Ctx(ctx).With("op", op)
-	startTime := time.Now()
-
-	defer p.logSlowOperation(ctx, op, startTime,
-		logger.String("src_ext", srcExt),
-		logger.String("dst_ext", dstExt),
-		logger.Int("quality", quality),
-	)
-
-	log.LogAttrs(ctx, logger.DebugLevel, "format conversion started")
-
-	img, err := p.Decode(ctx, src, srcExt)
-	if err != nil {
-		return nil, fmt.Errorf("%s: decode: %w", op, err)
-	}
-
-	if quality <= 0 {
-		quality = p.jpegQuality
-	}
-
-	log.LogAttrs(ctx, logger.DebugLevel, "format conversion completed",
-		logger.Duration("duration", time.Since(startTime)),
-	)
-
-	return p.Encode(ctx, img, dstExt, quality)
-}
-
-func (p *ImageProcessor) Decode(ctx context.Context, src io.Reader, ext string) (image.Image, error) {
-	const op = "processor.image.Decode"
-
+func (p *ImageProcessor) Decode(_ context.Context, src io.Reader, ext string) (image.Image, error) {
+	const op = "processor.Decode"
 	switch strings.ToLower(ext) {
 	case "jpg", "jpeg":
 		img, err := jpeg.Decode(src)
@@ -271,11 +165,8 @@ func (p *ImageProcessor) Decode(ctx context.Context, src io.Reader, ext string) 
 		return img, nil
 	case "gif":
 		g, err := gif.DecodeAll(src)
-		if err != nil {
-			return nil, fmt.Errorf("%s: gif decode: %w", op, err)
-		}
-		if len(g.Image) == 0 {
-			return nil, fmt.Errorf("%s: empty gif", op)
+		if err != nil || len(g.Image) == 0 {
+			return nil, fmt.Errorf("%s: %w", op, entity.ErrDecodeFailed)
 		}
 		return g.Image[0], nil
 	default:
@@ -283,9 +174,8 @@ func (p *ImageProcessor) Decode(ctx context.Context, src io.Reader, ext string) 
 	}
 }
 
-func (p *ImageProcessor) Encode(ctx context.Context, img image.Image, ext string, quality int) (io.Reader, error) {
-	const op = "processor.image.Encode"
-
+func (p *ImageProcessor) Encode(_ context.Context, img image.Image, ext string, quality int) (io.Reader, error) {
+	const op = "processor.Encode"
 	var buf bytes.Buffer
 
 	switch strings.ToLower(ext) {
@@ -294,40 +184,31 @@ func (p *ImageProcessor) Encode(ctx context.Context, img image.Image, ext string
 			quality = p.jpegQuality
 		}
 		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
-			return nil, fmt.Errorf("%s: jpeg encode: %w", op, err)
+			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 	case "png":
 		if err := png.Encode(&buf, img); err != nil {
-			return nil, fmt.Errorf("%s: png encode: %w", op, err)
+			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 	case "gif":
-		if err := gif.Encode(&buf, img, &gif.Options{NumColors: 256}); err != nil {
-			return nil, fmt.Errorf("%s: gif encode: %w", op, err)
+		if err := gif.Encode(&buf, img, &gif.Options{NumColors: _gifMaxColors}); err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
 		}
 	default:
 		return nil, fmt.Errorf("%s: %w: %s", op, entity.ErrUnsupportedFormat, ext)
 	}
-
 	return bytes.NewReader(buf.Bytes()), nil
 }
 
-func (p *ImageProcessor) loadWatermarkImage(path string) (image.Image, error) {
-	// В реальном проекте: кэширование, загрузка из хранилища
-	// Здесь — простая загрузка с диска
-	// Для безопасности: валидация пути, ограничение размера
-
-	// Заглушка: возвращаем прозрачное изображение 200x50
-	// В продакшене: os.Open + decode по расширению
-	img := image.NewNRGBA(image.Rect(0, 0, 200, 50))
-	// Рисуем полупрозрачный прямоугольник
+func (p *ImageProcessor) loadWatermarkImage(_ string) image.Image {
+	img := image.NewNRGBA(image.Rect(0, 0, _watermarkW, _watermarkH))
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{255, 255, 255, _watermarkOpacity}}, image.Point{}, draw.Src)
-	return img, nil
+	return img
 }
 
-func (p *ImageProcessor) applyImageWatermark(base *image.NRGBA, watermark image.Image) error {
+func (p *ImageProcessor) applyImageWatermark(base *image.NRGBA, watermark image.Image) {
 	bBounds := base.Bounds()
 	wBounds := watermark.Bounds()
-
 	x := bBounds.Dx() - wBounds.Dx() - _watermarkPadding
 	y := bBounds.Dy() - wBounds.Dy() - _watermarkPadding
 	if x < 0 {
@@ -336,47 +217,19 @@ func (p *ImageProcessor) applyImageWatermark(base *image.NRGBA, watermark image.
 	if y < 0 {
 		y = _watermarkPadding
 	}
-
 	draw.Draw(base, image.Rect(x, y, x+wBounds.Dx(), y+wBounds.Dy()), watermark, wBounds.Min, draw.Over)
-	return nil
 }
 
-func (p *ImageProcessor) applyTextWatermark(base *image.NRGBA, text string) error {
+func (p *ImageProcessor) applyTextWatermark(base *image.NRGBA, text string) {
 	bBounds := base.Bounds()
-
-	textW := len(text) * 7
+	textW := len(text) * _textCharWidth
 	textH := 13
 
 	x := bBounds.Dx() - textW - _watermarkPadding
 	y := bBounds.Dy() - _watermarkPadding
 
-	bgRect := image.Rect(x-5, y-textH-5, x+textW+5, y+5)
-	draw.Draw(base, bgRect, &image.Uniform{color.RGBA{0, 0, 0, 100}}, image.Point{}, draw.Over)
-
-	// Рисуем текст (упрощённо: через draw.String из basicfont)
-	// В реальном проекте: use golang.org/x/image/font
-	point := fixed.Point26_6{X: fixed.I(x), Y: fixed.I(y)}
-	// draw.String(base, face, point, text, color.White, nil) // требует font.Drawer
-
-	// Заглушка: просто прямоугольник с текстом (без рендеринга символов)
-	_ = point // suppress unused
-	return nil
-}
-
-func (p *ImageProcessor) logSlowOperation(
-	ctx context.Context,
-	op string,
-	startTime time.Time,
-	attrs ...logger.Attr,
-) {
-	duration := time.Since(startTime)
-	if duration > _slowOperationThreshold {
-		allAttrs := append([]logger.Attr{
-			logger.String("op", op),
-			logger.Duration("duration", duration),
-		}, attrs...)
-		p.log.Ctx(ctx).LogAttrs(ctx, logger.WarnLevel, "slow operation detected", allAttrs...)
-	}
+	bgRect := image.Rect(x-_textPadding, y-textH-_textPadding, x+textW+_textPadding, y+_textPadding)
+	draw.Draw(base, bgRect, &image.Uniform{color.RGBA{0, 0, 0, 100}}, image.Point{}, draw.Src)
 }
 
 func extFromPath(path string) string {

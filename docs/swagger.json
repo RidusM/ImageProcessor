@@ -1,8 +1,8 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "API для работы с уведомлениями",
-        "title": "Notification Service API",
+        "description": "API для работы с обработчиком изображений",
+        "title": "Image Processor Service API",
         "termsOfService": "http://swagger.io/terms/",
         "contact": {
             "name": "RidusM",
@@ -17,103 +17,89 @@
     "host": "localhost:8080",
     "basePath": "/",
     "paths": {
-        "/notify": {
-            "post": {
-                "description": "Планирует отправку уведомления на указанное время",
-                "consumes": [
-                    "application/json"
-                ],
+        "/health": {
+            "get": {
+                "description": "Проверка доступности сервиса",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "Notification"
+                    "System"
                 ],
-                "summary": "Создать уведомление",
-                "parameters": [
-                    {
-                        "description": "Данные уведомления",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/httpt.CreateNotificationRequest"
-                        }
-                    }
-                ],
+                "summary": "Health check",
                 "responses": {
-                    "201": {
-                        "description": "Уведомление создано",
+                    "200": {
+                        "description": "Сервис доступен",
                         "schema": {
-                            "$ref": "#/definitions/httpt.CreateNotificationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Ошибка валидации",
-                        "schema": {
-                            "$ref": "#/definitions/httpt.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Внутренняя ошибка",
-                        "schema": {
-                            "$ref": "#/definitions/httpt.ErrorResponse"
+                            "$ref": "#/definitions/handlers.HealthResponse"
                         }
                     }
                 }
             }
         },
-        "/notify/{id}": {
+        "/image/{id}": {
             "get": {
-                "description": "Возвращает статус уведомления по уникальному идентификатору",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Возвращает обработанное изображение или статус задачи",
                 "produces": [
-                    "application/json"
+                    "application/json",
+                    "image/jpeg",
+                    "image/png"
                 ],
                 "tags": [
-                    "Notification"
+                    "Image"
                 ],
-                "summary": "Получить статус уведомления",
+                "summary": "Получить изображение или статус",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Уникальный идентификатор уведомления",
+                        "description": "ID изображения",
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "string",
+                        "default": "processed",
+                        "description": "Версия: processed|original|thumb",
+                        "name": "version",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Успешный ответ с статусом уведомления",
+                        "description": "Обработанное изображение",
                         "schema": {
-                            "$ref": "#/definitions/httpt.NotificationStatusResponse"
+                            "type": "file"
+                        }
+                    },
+                    "202": {
+                        "description": "Изображение ещё обрабатывается",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ImageStatusResponse"
                         }
                     },
                     "400": {
-                        "description": "Неверный формат notify_id",
+                        "description": "Неверный ID",
                         "schema": {
-                            "$ref": "#/definitions/httpt.ErrorResponse"
+                            "$ref": "#/definitions/handlers.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Уведомление не найдено",
+                        "description": "Изображение не найдено",
                         "schema": {
-                            "$ref": "#/definitions/httpt.ErrorResponse"
+                            "$ref": "#/definitions/handlers.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Внутренняя ошибка сервера",
+                        "description": "Внутренняя ошибка",
                         "schema": {
-                            "$ref": "#/definitions/httpt.ErrorResponse"
+                            "$ref": "#/definitions/handlers.ErrorResponse"
                         }
                     }
                 }
             },
             "delete": {
-                "description": "Отменяет запланированное уведомление",
+                "description": "Удаляет изображение и все его версии (оригинал, обработанное, миниатюру)",
                 "consumes": [
                     "application/json"
                 ],
@@ -121,13 +107,54 @@
                     "application/json"
                 ],
                 "tags": [
-                    "Notification"
+                    "Image"
                 ],
-                "summary": "Отменить уведомление",
+                "summary": "Удалить изображение",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "Уникальный идентификатор уведомления",
+                        "description": "ID изображения",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Изображение удалено"
+                    },
+                    "400": {
+                        "description": "Неверный ID",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/image/{id}/status": {
+            "get": {
+                "description": "Возвращает текущий статус задачи обработки изображения",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Image"
+                ],
+                "summary": "Получить статус обработки",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "ID изображения",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -135,33 +162,89 @@
                 ],
                 "responses": {
                     "200": {
-                        "description": "Успешный ответ",
+                        "description": "Обработка завершена",
                         "schema": {
-                            "$ref": "#/definitions/httpt.SuccessResponse"
+                            "$ref": "#/definitions/handlers.ImageStatusResponse"
+                        }
+                    },
+                    "202": {
+                        "description": "Обработка в процессе",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ImageStatusResponse"
                         }
                     },
                     "400": {
-                        "description": "Неверный формат notify_id",
+                        "description": "Неверный ID",
                         "schema": {
-                            "$ref": "#/definitions/httpt.ErrorResponse"
+                            "$ref": "#/definitions/handlers.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Уведомление не найдено",
+                        "description": "Задача не найдена",
                         "schema": {
-                            "$ref": "#/definitions/httpt.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Уведомление уже отправлено или отменено",
-                        "schema": {
-                            "$ref": "#/definitions/httpt.ErrorResponse"
+                            "$ref": "#/definitions/handlers.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Внутренняя ошибка сервера",
+                        "description": "Внутренняя ошибка",
                         "schema": {
-                            "$ref": "#/definitions/httpt.ErrorResponse"
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/upload": {
+            "post": {
+                "description": "Загружает изображение на обработку (ресайз, миниатюра, водяной знак)",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Image"
+                ],
+                "summary": "Загрузить изображение",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Файл изображения",
+                        "name": "image",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "JSON с опциями обработки",
+                        "name": "options",
+                        "in": "formData"
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Изображение принято в обработку",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.UploadResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Ошибка валидации",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "413": {
+                        "description": "Файл слишком большой",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Внутренняя ошибка",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ErrorResponse"
                         }
                     }
                 }
@@ -169,61 +252,7 @@
         }
     },
     "definitions": {
-        "httpt.CreateNotificationRequest": {
-            "type": "object",
-            "properties": {
-                "channel": {
-                    "type": "string",
-                    "example": "email"
-                },
-                "payload": {
-                    "type": "string",
-                    "example": "Your order #123 is ready!"
-                },
-                "recipient": {
-                    "type": "string",
-                    "example": "user@example.com"
-                },
-                "scheduled_at": {
-                    "type": "string",
-                    "example": "2023-10-27T10:00:00Z"
-                }
-            }
-        },
-        "httpt.CreateNotificationResponse": {
-            "type": "object",
-            "properties": {
-                "channel": {
-                    "type": "string",
-                    "example": "email"
-                },
-                "id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440001"
-                },
-                "message": {
-                    "type": "string",
-                    "example": "Notification created successfully"
-                },
-                "payload": {
-                    "type": "string",
-                    "example": "Your order #123 is ready!"
-                },
-                "recipient": {
-                    "type": "string",
-                    "example": "user@example.com"
-                },
-                "scheduled_at": {
-                    "type": "string",
-                    "example": "2023-10-27T10:00:00Z"
-                },
-                "user_id": {
-                    "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
-                }
-            }
-        },
-        "httpt.ErrorResponse": {
+        "handlers.ErrorResponse": {
             "type": "object",
             "properties": {
                 "code": {
@@ -232,65 +261,82 @@
                 },
                 "details": {
                     "type": "string",
-                    "example": "notification with id 123 does not exist"
+                    "example": "image with id abc123 does not exist"
                 },
                 "error": {
                     "type": "string",
-                    "example": "notification not found"
+                    "example": "image not found"
                 }
             }
         },
-        "httpt.NotificationStatusResponse": {
+        "handlers.HealthResponse": {
             "type": "object",
             "properties": {
-                "channel": {
+                "status": {
                     "type": "string",
-                    "example": "EMAIL"
+                    "example": "ok"
                 },
+                "time": {
+                    "type": "string",
+                    "example": "2024-01-15T10:30:00Z"
+                }
+            }
+        },
+        "handlers.ImageStatusResponse": {
+            "type": "object",
+            "properties": {
                 "created_at": {
                     "type": "string",
-                    "example": "2023-10-26T10:00:00Z"
+                    "example": "2024-01-15T10:30:00Z"
+                },
+                "error": {
+                    "type": "string",
+                    "example": "resize failed"
+                },
+                "filename": {
+                    "type": "string",
+                    "example": "photo.jpg"
                 },
                 "id": {
                     "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440001"
+                    "example": "a1b2c3d4e5f6"
                 },
-                "last_error": {
-                    "type": "string",
-                    "example": "connection timeout"
-                },
-                "payload": {
-                    "type": "string",
-                    "example": "Your order #123 is ready!"
-                },
-                "retry_count": {
+                "progress": {
                     "type": "integer",
-                    "example": 1
-                },
-                "scheduled_at": {
-                    "type": "string",
-                    "example": "2023-10-27T10:00:00Z"
-                },
-                "sent_at": {
-                    "type": "string",
-                    "example": "2023-10-27T10:00:05Z"
+                    "example": 45
                 },
                 "status": {
                     "type": "string",
-                    "example": "waiting"
+                    "example": "processing"
                 },
-                "user_id": {
+                "updated_at": {
                     "type": "string",
-                    "example": "550e8400-e29b-41d4-a716-446655440000"
+                    "example": "2024-01-15T10:30:05Z"
                 }
             }
         },
-        "httpt.SuccessResponse": {
+        "handlers.UploadResponse": {
             "type": "object",
             "properties": {
+                "filename": {
+                    "type": "string",
+                    "example": "photo.jpg"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "a1b2c3d4e5f6"
+                },
                 "message": {
                     "type": "string",
-                    "example": "Notification cancelled successfully"
+                    "example": "Image uploaded successfully"
+                },
+                "size": {
+                    "type": "integer",
+                    "example": 2048576
+                },
+                "status": {
+                    "type": "string",
+                    "example": "pending"
                 }
             }
         }

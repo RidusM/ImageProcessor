@@ -1,4 +1,4 @@
-package httpt
+package handlers
 
 import (
 	"net/http"
@@ -47,7 +47,7 @@ func (h *ImageHandler) corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
 			c.Header("Access-Control-Max-Age", "86400")
 		}
 
-		if c.Request.Method == "OPTIONS" {
+		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}

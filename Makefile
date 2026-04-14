@@ -68,14 +68,6 @@ swag-v1: ## Generate Swagger documentation
 .PHONY: mock
 mock: ## Generate mocks in target directories
 	@echo "Generating mocks..."
-	mockgen -package=mock_repository -destination=internal/repository/mock/user_repository_mock.go \
-		delayednotifier/internal/service UserRepository
-	mockgen -package=mock_repository -destination=internal/repository/mock/notify_repository_mock.go \
-		delayednotifier/internal/service NotifyRepository
-	mockgen -package=mock_repository -destination=internal/repository/mock/cache_repository_mock.go \
-		delayednotifier/internal/service CacheRepository
-	mockgen -package=mock_sender -destination=internal/transport/sender/mock/sender_mock.go \
-		delayednotifier/internal/service NotificationSender
 	@echo "Mocks generated successfully:"
 
 .PHONY: run

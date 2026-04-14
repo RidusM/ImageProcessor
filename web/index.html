@@ -1,11 +1,3 @@
-
----
-
-## 📁 `static/index.html`
-
-Полностью автономный файл. Копируй в `static/index.html` и открывай в браузере. Работает с нашим API из коробки.
-
-```html
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -13,421 +5,149 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Image Processor</title>
     <style>
-        :root {
-            --bg: #0f1117;
-            --card: #181b25;
-            --border: #2a2f3d;
-            --text: #e2e8f0;
-            --text-muted: #8b92a5;
-            --primary: #3b82f6;
-            --primary-hover: #2563eb;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --radius: 12px;
-            --shadow: 0 4px 20px rgba(0,0,0,0.3);
-        }
-
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            line-height: 1.5;
-            padding: 20px;
-            min-height: 100vh;
-        }
-
-        .container { max-width: 1200px; margin: 0 auto; }
-        header { margin-bottom: 30px; text-align: center; }
-        h1 { font-size: 2rem; margin-bottom: 8px; }
-        .subtitle { color: var(--text-muted); font-size: 0.95rem; }
-
-        /* Upload Area */
-        .upload-zone {
-            border: 2px dashed var(--border);
-            border-radius: var(--radius);
-            padding: 40px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            background: var(--card);
-            margin-bottom: 30px;
-        }
-        .upload-zone:hover, .upload-zone.dragover {
-            border-color: var(--primary);
-            background: rgba(59, 130, 246, 0.05);
-        }
+        :root { --bg: #f8fafc; --card: #ffffff; --primary: #2563eb; --text: #1e293b; --gray: #64748b; --border: #e2e8f0; }
+        body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 2rem; }
+        .container { max-width: 900px; margin: 0 auto; }
+        .upload-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 2rem; text-align: center; background: var(--card); margin-bottom: 2rem; transition: all 0.2s; }
+        .upload-zone:hover, .upload-zone.dragover { border-color: var(--primary); background: #eff6ff; }
         .upload-zone input { display: none; }
-        .upload-icon { font-size: 2.5rem; margin-bottom: 10px; opacity: 0.7; }
-        .upload-text { color: var(--text-muted); }
-        .upload-hint { font-size: 0.85rem; color: var(--text-muted); margin-top: 8px; opacity: 0.7; }
-
-        /* Gallery Grid */
-        .gallery {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-            gap: 20px;
-        }
-
-        .card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            overflow: hidden;
-            transition: transform 0.2s, box-shadow 0.2s;
-            position: relative;
-        }
-        .card:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
-        
-        .card-thumb {
-            width: 100%;
-            height: 180px;
-            object-fit: cover;
-            background: #000;
-            display: block;
-        }
-        .card-thumb.loading {
-            background: linear-gradient(90deg, #1a1d29 25%, #252836 50%, #1a1d29 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s infinite;
-        }
-
-        @keyframes shimmer {
-            0% { background-position: 200% 0; }
-            100% { background-position: -200% 0; }
-        }
-
-        .card-body { padding: 16px; }
-        .card-title {
-            font-weight: 500;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            margin-bottom: 8px;
-        }
-        .card-meta { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 12px; }
-
-        /* Status Badge */
-        .badge {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .badge.pending { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
-        .badge.processing { background: rgba(59, 130, 246, 0.15); color: var(--primary); }
-        .badge.done { background: rgba(16, 185, 129, 0.15); color: var(--success); }
-        .badge.error { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
-
-        /* Progress Bar */
-        .progress-bar {
-            height: 4px;
-            background: var(--border);
-            border-radius: 2px;
-            margin: 10px 0;
-            overflow: hidden;
-        }
-        .progress-fill {
-            height: 100%;
-            background: var(--primary);
-            transition: width 0.3s ease;
-            width: 0%;
-        }
-
-        /* Actions */
-        .actions { display: flex; gap: 8px; margin-top: 12px; }
-        .btn {
-            flex: 1;
-            padding: 8px;
-            border: none;
-            border-radius: 8px;
-            background: var(--border);
-            color: var(--text);
-            cursor: pointer;
-            font-size: 0.85rem;
-            transition: background 0.2s;
-            text-decoration: none;
-            text-align: center;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-        }
-        .btn:hover { background: #343a4c; }
-        .btn.primary { background: var(--primary); color: white; }
-        .btn.primary:hover { background: var(--primary-hover); }
-        .btn.danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
-        .btn.danger:hover { background: rgba(239, 68, 68, 0.25); }
-        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: var(--text-muted);
-            grid-column: 1 / -1;
-        }
-        .empty-icon { font-size: 3rem; margin-bottom: 10px; opacity: 0.5; }
-
-        /* Toast Notifications */
-        .toast-container {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 1000;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-        .toast {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 12px 16px;
-            box-shadow: var(--shadow);
-            animation: slideIn 0.3s ease;
-            max-width: 300px;
-        }
-        .toast.error { border-color: var(--danger); }
-        .toast.success { border-color: var(--success); }
-        @keyframes slideIn {
-            from { transform: translateX(100%); opacity: 0; }
-            to { transform: translateX(0); opacity: 1; }
-        }
-
-        /* Responsive */
-        @media (max-width: 640px) {
-            .gallery { grid-template-columns: 1fr; }
-            .upload-zone { padding: 30px 20px; }
-        }
+        .btn { background: var(--primary); color: white; border: none; padding: 0.6rem 1.2rem; border-radius: 6px; cursor: pointer; font-weight: 500; }
+        .btn:hover { opacity: 0.9; }
+        .btn-del { background: #ef4444; }
+        .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 1.5rem; }
+        .card { background: var(--card); border-radius: 10px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .card img { width: 100%; height: 180px; object-fit: cover; background: #f1f5f9; }
+        .card-body { padding: 1rem; }
+        .status { display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; }
+        .status.pending { background: #fef3c7; color: #92400e; }
+        .status.processing { background: #dbeafe; color: #1e40af; }
+        .status.done { background: #dcfce7; color: #166534; }
+        .status.error { background: #fee2e2; color: #991b1b; }
+        .progress-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-top: 0.5rem; }
+        .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.3s; }
+        .meta { font-size: 0.85rem; color: var(--gray); margin: 0.5rem 0; display: flex; justify-content: space-between; }
+        .actions { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>🖼 Image Processor</h1>
-            <p class="subtitle">Загрузите изображение для автоматической обработки, ресайза и генерации миниатюр</p>
-        </header>
-
-        <div class="upload-zone" id="uploadZone">
-            <input type="file" id="fileInput" accept="image/jpeg,image/png,image/gif,image/webp">
-            <div class="upload-icon">📤</div>
-            <div class="upload-text">Перетащите изображение сюда или нажмите для выбора</div>
-            <div class="upload-hint">Поддерживаются JPG, PNG, GIF, WebP (до 32MB)</div>
-        </div>
-
-        <div class="gallery" id="gallery">
-            <div class="empty-state">
-                <div class="empty-icon">🖼</div>
-                <p>Нет загруженных изображений</p>
-            </div>
-        </div>
+<div class="container">
+    <h1>🖼️ Image Processor</h1>
+    <div class="upload-zone" id="dropZone">
+        <p>Перетащите изображение или <label style="color:var(--primary); cursor:pointer; text-decoration:underline;">выберите файл</label></p>
+        <input type="file" id="fileInput" accept="image/jpeg,image/png,image/gif">
     </div>
+    <div id="gallery" class="gallery"></div>
+</div>
 
-    <div class="toast-container" id="toasts"></div>
+<script>
+    const API = window.location.origin;
+    const images = new Map();
 
-    <script>
-        const API = '';
-        const POLL_INTERVAL = 2000;
-        let images = JSON.parse(localStorage.getItem('ip_images') || '[]');
-        let pollTimer = null;
+    // Upload handling
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
 
-        // DOM Elements
-        const uploadZone = document.getElementById('uploadZone');
-        const fileInput = document.getElementById('fileInput');
+    dropZone.addEventListener('click', () => fileInput.click());
+    dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) upload(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', (e) => { if (e.target.files.length) upload(e.target.files[0]); });
+
+    async function upload(file) {
+        const formData = new FormData();
+        formData.append('image', file);
+        
+        const card = addCardToUI({ id: 'uploading_' + Date.now(), status: 'pending', filename: file.name, progress: 0 });
+        
+        try {
+            const res = await fetch(`${API}/upload`, { method: 'POST', body: formData });
+            if (!res.ok) throw new Error('Upload failed');
+            const data = await res.json();
+            updateCardStatus(data.id, 'pending', 0);
+            pollStatus(data.id);
+        } catch (err) {
+            updateCardStatus(card.id, 'error', 0, err.message);
+        }
+    }
+
+    function addCardToUI(img) {
         const gallery = document.getElementById('gallery');
-        const toasts = document.getElementById('toasts');
-
-        // Init
-        document.addEventListener('DOMContentLoaded', () => {
-            renderGallery();
-            startPolling();
-        });
-
-        // Upload Handlers
-        uploadZone.addEventListener('click', () => fileInput.click());
-        uploadZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadZone.classList.add('dragover');
-        });
-        uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('dragover'));
-        uploadZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadZone.classList.remove('dragover');
-            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
-        });
-        fileInput.addEventListener('change', (e) => {
-            if (e.target.files.length) handleFile(e.target.files[0]);
-            e.target.value = ''; // reset
-        });
-
-        async function handleFile(file) {
-            if (!file.type.startsWith('image/')) {
-                showToast('Пожалуйста, выберите изображение', 'error');
-                return;
-            }
-            if (file.size > 32 * 1024 * 1024) {
-                showToast('Файл слишком большой (макс. 32MB)', 'error');
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('image', file);
-
-            try {
-                const res = await fetch(`${API}/upload`, { method: 'POST', body: formData });
-                const json = await res.json();
-                
-                if (!res.ok) throw new Error(json.error?.message || 'Upload failed');
-                
-                const data = json.data;
-                images.unshift({
-                    id: data.id,
-                    filename: data.filename,
-                    status: 'pending',
-                    progress: 0,
-                    size: data.size
-                });
-                saveImages();
-                renderGallery();
-                showToast('Изображение загружено', 'success');
-            } catch (err) {
-                showToast(err.message || 'Ошибка загрузки', 'error');
-            }
-        }
-
-        // Status Polling
-        function startPolling() {
-            if (pollTimer) clearInterval(pollTimer);
-            pollTimer = setInterval(async () => {
-                const pending = images.filter(i => i.status !== 'done' && i.status !== 'error');
-                if (pending.length === 0) return;
-
-                for (const img of pending) {
-                    try {
-                        const res = await fetch(`${API}/image/${img.id}/status`);
-                        const json = await res.json();
-                        if (!res.ok) continue;
-                        
-                        const statusData = json.data;
-                        img.status = statusData.status;
-                        img.progress = statusData.progress || 0;
-                        
-                        if (img.status === 'done' || img.status === 'error') {
-                            saveImages();
-                            renderGallery();
-                        } else {
-                            // Update UI without full re-render for performance
-                            updateCardProgress(img.id, img.progress);
-                        }
-                    } catch (e) {
-                        // silent fail for polling
-                    }
-                }
-            }, POLL_INTERVAL);
-        }
-
-        // Render
-        function renderGallery() {
-            if (images.length === 0) {
-                gallery.innerHTML = `
-                    <div class="empty-state">
-                        <div class="empty-icon">🖼</div>
-                        <p>Нет загруженных изображений</p>
-                    </div>`;
-                return;
-            }
-
-            gallery.innerHTML = images.map(img => `
-                <div class="card" data-id="${img.id}">
-                    <img src="${API}/image/${img.id}?version=thumb" 
-                         class="card-thumb ${img.status === 'pending' || img.status === 'processing' ? 'loading' : ''}"
-                         alt="${img.filename}"
-                         onerror="this.style.display='none'">
-                    <div class="card-body">
-                        <div class="card-title" title="${img.filename}">${img.filename}</div>
-                        <div class="card-meta">${formatSize(img.size)} • ${img.id.slice(0, 8)}...</div>
-                        <span class="badge ${img.status}">${statusLabel(img.status)}</span>
-                        ${img.status === 'processing' ? `
-                            <div class="progress-bar">
-                                <div class="progress-fill" style="width: ${img.progress}%"></div>
-                            </div>
-                        ` : ''}
-                        <div class="actions">
-                            <a href="${API}/image/${img.id}?version=processed" class="btn primary" download target="_blank" ${img.status !== 'done' ? 'disabled' : ''}>
-                                ⬇ Скачать
-                            </a>
-                            <button class="btn danger" onclick="deleteImage('${img.id}')">
-                                🗑 Удалить
-                            </button>
-                        </div>
-                    </div>
+        const div = document.createElement('div');
+        div.className = 'card';
+        div.id = `card-${img.id}`;
+        div.innerHTML = `
+            <img src="" alt="Preview" id="img-${img.id}" style="display:none">
+            <div class="card-body">
+                <strong>${img.filename || 'Загрузка...'}</strong>
+                <div class="meta">
+                    <span class="status ${img.status}">${img.status}</span>
+                    <span>${img.progress || 0}%</span>
                 </div>
-            `).join('');
-        }
+                <div class="progress-bar"><div class="progress-fill" style="width: ${img.progress || 0}%"></div></div>
+                <div class="actions">
+                    <button class="btn" onclick="downloadImage('${img.id}')">Скачать</button>
+                    <button class="btn btn-del" onclick="deleteImage('${img.id}')">Удалить</button>
+                </div>
+            </div>
+        `;
+        gallery.prepend(div);
+        images.set(img.id, img);
+        return { id: img.id, el: div };
+    }
 
-        function updateCardProgress(id, progress) {
-            const card = document.querySelector(`.card[data-id="${id}"]`);
-            if (!card) return;
-            const fill = card.querySelector('.progress-fill');
-            if (fill) fill.style.width = `${progress}%`;
-        }
+    function updateCardStatus(id, status, progress, errorMsg) {
+        const card = document.getElementById(`card-${id}`);
+        if (!card) return;
+        const statusEl = card.querySelector('.status');
+        const progEl = card.querySelector('.progress-fill');
+        const pctEl = card.querySelector('.meta span:last-child');
+        
+        statusEl.className = `status ${status}`;
+        statusEl.textContent = status;
+        progEl.style.width = `${progress}%`;
+        pctEl.textContent = `${progress}%`;
 
-        async function deleteImage(id) {
-            if (!confirm('Удалить изображение и все его версии?')) return;
+        if (status === 'done') {
+            const img = document.getElementById(`img-${id}`);
+            img.src = `${API}/image/${id}?version=processed`;
+            img.style.display = 'block';
+            clearInterval(window[`poll-${id}`]);
+        } else if (status === 'error') {
+            alert(`Ошибка обработки: ${errorMsg || 'Unknown'}`);
+            clearInterval(window[`poll-${id}`]);
+        }
+    }
+
+    function pollStatus(id) {
+        const interval = setInterval(async () => {
             try {
-                const res = await fetch(`${API}/image/${id}`, { method: 'DELETE' });
-                if (!res.ok && res.status !== 204) throw new Error('Delete failed');
-                
-                images = images.filter(i => i.id !== id);
-                saveImages();
-                renderGallery();
-                showToast('Изображение удалено', 'success');
-            } catch (err) {
-                showToast(err.message || 'Ошибка удаления', 'error');
-            }
-        }
+                const res = await fetch(`${API}/image/${id}/status`);
+                const data = await res.json();
+                updateCardStatus(id, data.status, data.progress, data.error);
+                if (data.status === 'done' || data.status === 'error') clearInterval(interval);
+            } catch { clearInterval(interval); }
+        }, 1500);
+        window[`poll-${id}`] = interval;
+    }
 
-        // Helpers
-        function saveImages() {
-            localStorage.setItem('ip_images', JSON.stringify(images));
-        }
+    async function downloadImage(id) {
+        window.open(`${API}/image/${id}?version=processed`, '_blank');
+    }
 
-        function statusLabel(status) {
-            const map = {
-                pending: '⏳ В очереди',
-                processing: '⚙️ Обработка',
-                done: '✅ Готово',
-                error: '❌ Ошибка'
-            };
-            return map[status] || status;
-        }
-
-        function formatSize(bytes) {
-            if (!bytes) return '—';
-            const units = ['B', 'KB', 'MB', 'GB'];
-            let i = 0;
-            let size = bytes;
-            while (size >= 1024 && i < units.length - 1) {
-                size /= 1024;
-                i++;
-            }
-            return `${size.toFixed(1)} ${units[i]}`;
-        }
-
-        function showToast(message, type = 'info') {
-            const toast = document.createElement('div');
-            toast.className = `toast ${type}`;
-            toast.textContent = message;
-            toasts.appendChild(toast);
-            setTimeout(() => {
-                toast.style.opacity = '0';
-                setTimeout(() => toast.remove(), 300);
-            }, 3000);
-        }
-    </script>
+    async function deleteImage(id) {
+        if (!confirm('Удалить изображение?')) return;
+        try {
+            await fetch(`${API}/image/${id}`, { method: 'DELETE' });
+            const card = document.getElementById(`card-${id}`);
+            if (card) card.remove();
+            images.delete(id);
+            clearInterval(window[`poll-${id}`]);
+        } catch (err) { alert('Ошибка удаления'); }
+    }
+</script>
 </body>
 </html>
