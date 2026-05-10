@@ -9,15 +9,7 @@ const docTemplate = `{
     "info": {
         "description": "{{escape .Description}}",
         "title": "{{.Title}}",
-        "termsOfService": "http://swagger.io/terms/",
-        "contact": {
-            "name": "RidusM",
-            "email": "stormkillpeople@gmail.com"
-        },
-        "license": {
-            "name": "MIT-0",
-            "url": "https://github.com/aws/mit-0"
-        },
+        "contact": {},
         "version": "{{.Version}}"
     },
     "host": "{{.Host}}",
@@ -25,19 +17,19 @@ const docTemplate = `{
     "paths": {
         "/health": {
             "get": {
-                "description": "Проверка доступности сервиса",
+                "description": "Return service status and current timestamp. No authentication required.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "System"
                 ],
-                "summary": "Health check",
+                "summary": "Health check endpoint",
                 "responses": {
                     "200": {
-                        "description": "Сервис доступен",
+                        "description": "Service is healthy",
                         "schema": {
-                            "$ref": "#/definitions/handlers.HealthResponse"
+                            "$ref": "#/definitions/handler.HealthResponse"
                         }
                     }
                 }
@@ -45,7 +37,7 @@ const docTemplate = `{
         },
         "/image/{id}": {
             "get": {
-                "description": "Возвращает обработанное изображение или статус задачи",
+                "description": "Returns the processed image or task status",
                 "produces": [
                     "application/json",
                     "image/jpeg",
@@ -54,11 +46,11 @@ const docTemplate = `{
                 "tags": [
                     "Image"
                 ],
-                "summary": "Получить изображение или статус",
+                "summary": "Get an image or status",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "ID изображения",
+                        "description": "Image ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -66,46 +58,46 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "default": "processed",
-                        "description": "Версия: processed|original|thumb",
+                        "description": "Version: processed|original|thumb",
                         "name": "version",
                         "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "Обработанное изображение",
+                        "description": "Processed image",
                         "schema": {
                             "type": "file"
                         }
                     },
                     "202": {
-                        "description": "Изображение ещё обрабатывается",
+                        "description": "Image is still being processed",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ImageStatusResponse"
+                            "$ref": "#/definitions/handler.ImageStatusResponse"
                         }
                     },
                     "400": {
-                        "description": "Неверный ID",
+                        "description": "Invalid ID",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
+                            "$ref": "#/definitions/handler.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Изображение не найдено",
+                        "description": "Image not found",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
+                            "$ref": "#/definitions/handler.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Внутренняя ошибка",
+                        "description": "Internal error",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
+                            "$ref": "#/definitions/handler.ErrorResponse"
                         }
                     }
                 }
             },
             "delete": {
-                "description": "Удаляет изображение и все его версии (оригинал, обработанное, миниатюру)",
+                "description": "Deletes the image and all its versions (original, processed, thumbnail)",
                 "consumes": [
                     "application/json"
                 ],
@@ -115,11 +107,11 @@ const docTemplate = `{
                 "tags": [
                     "Image"
                 ],
-                "summary": "Удалить изображение",
+                "summary": "Delete image",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "ID изображения",
+                        "description": "Image ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -127,18 +119,18 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "204": {
-                        "description": "Изображение удалено"
+                        "description": "Image deleted"
                     },
                     "400": {
-                        "description": "Неверный ID",
+                        "description": "Invalid ID",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
+                            "$ref": "#/definitions/handler.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Внутренняя ошибка",
+                        "description": "Internal error",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
+                            "$ref": "#/definitions/handler.ErrorResponse"
                         }
                     }
                 }
@@ -146,7 +138,7 @@ const docTemplate = `{
         },
         "/image/{id}/status": {
             "get": {
-                "description": "Возвращает текущий статус задачи обработки изображения",
+                "description": "Returns the current status of the image processing task",
                 "consumes": [
                     "application/json"
                 ],
@@ -156,11 +148,11 @@ const docTemplate = `{
                 "tags": [
                     "Image"
                 ],
-                "summary": "Получить статус обработки",
+                "summary": "Get the processing status",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "ID изображения",
+                        "description": "Image ID",
                         "name": "id",
                         "in": "path",
                         "required": true
@@ -168,33 +160,33 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "Обработка завершена",
+                        "description": "Processing complete",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ImageStatusResponse"
+                            "$ref": "#/definitions/handler.ImageStatusResponse"
                         }
                     },
                     "202": {
-                        "description": "Обработка в процессе",
+                        "description": "Processing in progress",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ImageStatusResponse"
+                            "$ref": "#/definitions/handler.ImageStatusResponse"
                         }
                     },
                     "400": {
-                        "description": "Неверный ID",
+                        "description": "Invalid ID",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
+                            "$ref": "#/definitions/handler.ErrorResponse"
                         }
                     },
                     "404": {
-                        "description": "Задача не найдена",
+                        "description": "Task not found",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
+                            "$ref": "#/definitions/handler.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Внутренняя ошибка",
+                        "description": "Internal error",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
+                            "$ref": "#/definitions/handler.ErrorResponse"
                         }
                     }
                 }
@@ -202,55 +194,43 @@ const docTemplate = `{
         },
         "/upload": {
             "post": {
-                "description": "Загружает изображение на обработку (ресайз, миниатюра, водяной знак)",
+                "description": "Uploads an image for processing (resize, thumbnail, watermark)",
                 "consumes": [
                     "multipart/form-data"
                 ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Image"
-                ],
-                "summary": "Загрузить изображение",
+                "summary": "Upload an image",
                 "parameters": [
                     {
                         "type": "file",
-                        "description": "Файл изображения",
+                        "description": "Image file",
                         "name": "image",
                         "in": "formData",
                         "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "JSON с опциями обработки",
-                        "name": "options",
-                        "in": "formData"
                     }
                 ],
                 "responses": {
                     "202": {
-                        "description": "Изображение принято в обработку",
+                        "description": "Image accepted for processing",
                         "schema": {
-                            "$ref": "#/definitions/handlers.UploadResponse"
+                            "$ref": "#/definitions/handler.UploadResponse"
                         }
                     },
                     "400": {
-                        "description": "Ошибка валидации",
+                        "description": "Validation error",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
+                            "$ref": "#/definitions/handler.ErrorResponse"
                         }
                     },
                     "413": {
-                        "description": "Файл слишком большой",
+                        "description": "File too large",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
+                            "$ref": "#/definitions/handler.ErrorResponse"
                         }
                     },
                     "500": {
-                        "description": "Внутренняя ошибка",
+                        "description": "Internal error",
                         "schema": {
-                            "$ref": "#/definitions/handlers.ErrorResponse"
+                            "$ref": "#/definitions/handler.ErrorResponse"
                         }
                     }
                 }
@@ -258,7 +238,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "handlers.ErrorResponse": {
+        "handler.ErrorResponse": {
             "type": "object",
             "properties": {
                 "code": {
@@ -267,7 +247,7 @@ const docTemplate = `{
                 },
                 "details": {
                     "type": "string",
-                    "example": "image with id abc123 does not exist"
+                    "example": "image with name photo1 does not exist"
                 },
                 "error": {
                     "type": "string",
@@ -275,7 +255,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.HealthResponse": {
+        "handler.HealthResponse": {
             "type": "object",
             "properties": {
                 "status": {
@@ -284,11 +264,11 @@ const docTemplate = `{
                 },
                 "time": {
                     "type": "string",
-                    "example": "2024-01-15T10:30:00Z"
+                    "example": "2026-05-08T06:04:15Z"
                 }
             }
         },
-        "handlers.ImageStatusResponse": {
+        "handler.ImageStatusResponse": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -305,7 +285,7 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "string",
-                    "example": "a1b2c3d4e5f6"
+                    "example": "550e8400-e29b-41d4-a716-446655440002"
                 },
                 "progress": {
                     "type": "integer",
@@ -321,7 +301,7 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.UploadResponse": {
+        "handler.UploadResponse": {
             "type": "object",
             "properties": {
                 "filename": {
@@ -330,7 +310,7 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "string",
-                    "example": "a1b2c3d4e5f6"
+                    "example": "550e8400-e29b-41d4-a716-446655440002"
                 },
                 "message": {
                     "type": "string",
@@ -351,12 +331,12 @@ const docTemplate = `{
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
-	Version:          "1.0",
-	Host:             "localhost:8080",
-	BasePath:         "/",
+	Version:          "",
+	Host:             "",
+	BasePath:         "",
 	Schemes:          []string{},
-	Title:            "Image Processor Service API",
-	Description:      "API для работы с обработчиком изображений",
+	Title:            "",
+	Description:      "",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

@@ -3,104 +3,114 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: ebooker-app
+    container_name: img-processor-app
     depends_on:
-      db:
+      kafka:
         condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-      redis:
-        condition: service_started
-      db-migrator:
+      kafka-init:
         condition: service_completed_successfully
+      minio:
+        condition: service_healthy
     ports:
       - "${HTTP_PORT:-8080}:${HTTP_PORT:-8080}"
     environment:
-      - CONFIG_PATH=./app/configs/dev.env
+      - CONFIG_PATH=/app/configs/dev.env
       - GIN_MODE=release
+      - ENV=${ENV:-local}
+    volumes:
+      - ./logs:/app/logs
+      - ./storage:/app/storage
+      - ./assets:/app/assets:ro
+      - ./web:/app/web:ro
     networks:
       - app-network
     restart: on-failure
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
 
-  db:
-    image: postgres:17-alpine
-    container_name: notify-db
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.9.2
+    container_name: img-processor-zookeeper
     environment:
-      POSTGRES_DB: ${DB_NAME:-notify_db}
-      POSTGRES_USER: ${DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
-    ports:
-      - "${DB_PORT:-5432}:${DB_PORT:-5432}"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     networks:
       - app-network
+    restart: unless-stopped
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: img-processor-kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    networks:
+      - app-network
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_CREATE_TOPICS: "image-processing:1:1,image-processing-dlq:1:1"
     healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-notify_db}",
-        ]
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:29092 --list || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+      start_period: 60s
+    restart: unless-stopped
+
+  kafka-init:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: img-processor-kafka-init
+    depends_on:
+      kafka:
+        condition: service_healthy
+    command: >
+      bash -c "
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic image-processing --partitions 1 --replication-factor 1 &&
+        kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic image-processing-dlq --partitions 1 --replication-factor 1 &&
+        echo 'Topics created successfully'
+      "
+    networks:
+      - app-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: img-processor-minio
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 30s
+      start_period: 10s
+    networks:
+      - app-network
     restart: unless-stopped
-
-  db-migrator:
-    image: migrate/migrate
-    container_name: notifier-db-migrator
-    depends_on:
-      db:
-        condition: service_healthy
-    networks:
-      - app-network
-    volumes:
-      - ./migrations:/migrations:ro
-    command:
-      - "-path"
-      - "/migrations"
-      - "-database"
-      - "postgres://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=${DB_SSL_MODE}"
-      - "up"
-    restart: "no"
-
-  redis:
-    image: redis:7-alpine
-    container_name: notifier-redis
-    command:
-      [
-        "redis-server",
-        "--maxmemory",
-        "100mb",
-        "--maxmemory-policy",
-        "allkeys-lru",
-      ]
-    ports:
-      - "6379:6379"
-    networks:
-      - app-network
-
-  rabbitmq:
-    image: rabbitmq:3-management-alpine
-    container_name: notifier-rabbitmq
-    environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    healthcheck:
-      test: rabbitmq-diagnostics check_port_connectivity
-      interval: 30s
-      timeout: 30s
-      retries: 10
-    networks:
-      - app-network
 
 networks:
   app-network:
     driver: bridge
 
 volumes:
-  pgdata:
+  minio-data:

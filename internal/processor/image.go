@@ -31,6 +31,12 @@ const (
 	_textCharWidth = 7
 	_textPadding   = 5
 	_centerDivisor = 2
+
+	_extJPG  = "jpg"
+	_extJPEG = "jpeg"
+	_extPNG  = "png"
+	_extGIF  = "gif"
+	_extWEBP = "webp"
 )
 
 type ImageProcessor struct {
@@ -42,7 +48,6 @@ type ImageProcessor struct {
 }
 
 func NewImageProcessor(log logger.Logger, opts ...Option) (*ImageProcessor, error) {
-	const op = "processor.NewImageProcessor"
 	p := &ImageProcessor{
 		log:         log,
 		maxWidth:    _defaultMaxWidth,
@@ -54,14 +59,13 @@ func NewImageProcessor(log logger.Logger, opts ...Option) (*ImageProcessor, erro
 	for _, opt := range opts {
 		opt(p)
 	}
-	if err := p.validate(); err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
+
 	return p, nil
 }
 
 func (p *ImageProcessor) Resize(ctx context.Context, src io.Reader, ext string, maxWidth int) (io.Reader, error) {
 	const op = "processor.Resize"
+
 	img, err := p.Decode(ctx, src, ext)
 	if err != nil {
 		return nil, fmt.Errorf("%s: decode: %w", op, err)
@@ -88,6 +92,7 @@ func (p *ImageProcessor) Resize(ctx context.Context, src io.Reader, ext string, 
 
 func (p *ImageProcessor) CreateThumbnail(ctx context.Context, src io.Reader, ext string, size int) (io.Reader, error) {
 	const op = "processor.CreateThumbnail"
+
 	img, err := p.Decode(ctx, src, ext)
 	if err != nil {
 		return nil, fmt.Errorf("%s: decode: %w", op, err)
@@ -124,6 +129,7 @@ func (p *ImageProcessor) AddWatermark(
 	watermarkPath string,
 ) (io.Reader, error) {
 	const op = "processor.AddWatermark"
+
 	baseImg, err := p.Decode(ctx, src, ext)
 	if err != nil {
 		return nil, fmt.Errorf("%s: decode base: %w", op, err)
@@ -150,20 +156,21 @@ func (p *ImageProcessor) AddWatermark(
 
 func (p *ImageProcessor) Decode(_ context.Context, src io.Reader, ext string) (image.Image, error) {
 	const op = "processor.Decode"
+
 	switch strings.ToLower(ext) {
-	case "jpg", "jpeg":
+	case _extJPG, _extJPEG:
 		img, err := jpeg.Decode(src)
 		if err != nil {
 			return nil, fmt.Errorf("%s: jpeg decode: %w", op, err)
 		}
 		return img, nil
-	case "png":
+	case _extPNG:
 		img, err := png.Decode(src)
 		if err != nil {
 			return nil, fmt.Errorf("%s: png decode: %w", op, err)
 		}
 		return img, nil
-	case "gif":
+	case _extGIF:
 		g, err := gif.DecodeAll(src)
 		if err != nil || len(g.Image) == 0 {
 			return nil, fmt.Errorf("%s: %w", op, entity.ErrDecodeFailed)
@@ -176,21 +183,22 @@ func (p *ImageProcessor) Decode(_ context.Context, src io.Reader, ext string) (i
 
 func (p *ImageProcessor) Encode(_ context.Context, img image.Image, ext string, quality int) (io.Reader, error) {
 	const op = "processor.Encode"
+
 	var buf bytes.Buffer
 
 	switch strings.ToLower(ext) {
-	case "jpg", "jpeg":
+	case _extJPG, _extJPEG:
 		if quality <= 0 {
 			quality = p.jpegQuality
 		}
 		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
-	case "png":
+	case _extPNG:
 		if err := png.Encode(&buf, img); err != nil {
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
-	case "gif":
+	case _extGIF:
 		if err := gif.Encode(&buf, img, &gif.Options{NumColors: _gifMaxColors}); err != nil {
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}

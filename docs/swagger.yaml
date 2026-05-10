@@ -1,27 +1,26 @@
-basePath: /
 definitions:
-  handlers.ErrorResponse:
+  handler.ErrorResponse:
     properties:
       code:
         example: not_found
         type: string
       details:
-        example: image with id abc123 does not exist
+        example: image with name photo1 does not exist
         type: string
       error:
         example: image not found
         type: string
     type: object
-  handlers.HealthResponse:
+  handler.HealthResponse:
     properties:
       status:
         example: ok
         type: string
       time:
-        example: "2024-01-15T10:30:00Z"
+        example: "2026-05-08T06:04:15Z"
         type: string
     type: object
-  handlers.ImageStatusResponse:
+  handler.ImageStatusResponse:
     properties:
       created_at:
         example: "2024-01-15T10:30:00Z"
@@ -33,7 +32,7 @@ definitions:
         example: photo.jpg
         type: string
       id:
-        example: a1b2c3d4e5f6
+        example: 550e8400-e29b-41d4-a716-446655440002
         type: string
       progress:
         example: 45
@@ -45,13 +44,13 @@ definitions:
         example: "2024-01-15T10:30:05Z"
         type: string
     type: object
-  handlers.UploadResponse:
+  handler.UploadResponse:
     properties:
       filename:
         example: photo.jpg
         type: string
       id:
-        example: a1b2c3d4e5f6
+        example: 550e8400-e29b-41d4-a716-446655440002
         type: string
       message:
         example: Image uploaded successfully
@@ -63,39 +62,30 @@ definitions:
         example: pending
         type: string
     type: object
-host: localhost:8080
 info:
-  contact:
-    email: stormkillpeople@gmail.com
-    name: RidusM
-  description: API для работы с обработчиком изображений
-  license:
-    name: MIT-0
-    url: https://github.com/aws/mit-0
-  termsOfService: http://swagger.io/terms/
-  title: Image Processor Service API
-  version: "1.0"
+  contact: {}
 paths:
   /health:
     get:
-      description: Проверка доступности сервиса
+      description: Return service status and current timestamp. No authentication
+        required.
       produces:
       - application/json
       responses:
         "200":
-          description: Сервис доступен
+          description: Service is healthy
           schema:
-            $ref: '#/definitions/handlers.HealthResponse'
-      summary: Health check
+            $ref: '#/definitions/handler.HealthResponse'
+      summary: Health check endpoint
       tags:
       - System
   /image/{id}:
     delete:
       consumes:
       - application/json
-      description: Удаляет изображение и все его версии (оригинал, обработанное, миниатюру)
+      description: Deletes the image and all its versions (original, processed, thumbnail)
       parameters:
-      - description: ID изображения
+      - description: Image ID
         in: path
         name: id
         required: true
@@ -104,28 +94,28 @@ paths:
       - application/json
       responses:
         "204":
-          description: Изображение удалено
+          description: Image deleted
         "400":
-          description: Неверный ID
+          description: Invalid ID
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/handler.ErrorResponse'
         "500":
-          description: Внутренняя ошибка
+          description: Internal error
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
-      summary: Удалить изображение
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Delete image
       tags:
       - Image
     get:
-      description: Возвращает обработанное изображение или статус задачи
+      description: Returns the processed image or task status
       parameters:
-      - description: ID изображения
+      - description: Image ID
         in: path
         name: id
         required: true
         type: string
       - default: processed
-        description: 'Версия: processed|original|thumb'
+        description: 'Version: processed|original|thumb'
         in: query
         name: version
         type: string
@@ -135,35 +125,35 @@ paths:
       - image/png
       responses:
         "200":
-          description: Обработанное изображение
+          description: Processed image
           schema:
             type: file
         "202":
-          description: Изображение ещё обрабатывается
+          description: Image is still being processed
           schema:
-            $ref: '#/definitions/handlers.ImageStatusResponse'
+            $ref: '#/definitions/handler.ImageStatusResponse'
         "400":
-          description: Неверный ID
+          description: Invalid ID
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/handler.ErrorResponse'
         "404":
-          description: Изображение не найдено
+          description: Image not found
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/handler.ErrorResponse'
         "500":
-          description: Внутренняя ошибка
+          description: Internal error
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
-      summary: Получить изображение или статус
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Get an image or status
       tags:
       - Image
   /image/{id}/status:
     get:
       consumes:
       - application/json
-      description: Возвращает текущий статус задачи обработки изображения
+      description: Returns the current status of the image processing task
       parameters:
-      - description: ID изображения
+      - description: Image ID
         in: path
         name: id
         required: true
@@ -172,64 +162,55 @@ paths:
       - application/json
       responses:
         "200":
-          description: Обработка завершена
+          description: Processing complete
           schema:
-            $ref: '#/definitions/handlers.ImageStatusResponse'
+            $ref: '#/definitions/handler.ImageStatusResponse'
         "202":
-          description: Обработка в процессе
+          description: Processing in progress
           schema:
-            $ref: '#/definitions/handlers.ImageStatusResponse'
+            $ref: '#/definitions/handler.ImageStatusResponse'
         "400":
-          description: Неверный ID
+          description: Invalid ID
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/handler.ErrorResponse'
         "404":
-          description: Задача не найдена
+          description: Task not found
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/handler.ErrorResponse'
         "500":
-          description: Внутренняя ошибка
+          description: Internal error
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
-      summary: Получить статус обработки
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Get the processing status
       tags:
       - Image
   /upload:
     post:
       consumes:
       - multipart/form-data
-      description: Загружает изображение на обработку (ресайз, миниатюра, водяной
-        знак)
+      description: Uploads an image for processing (resize, thumbnail, watermark)
       parameters:
-      - description: Файл изображения
+      - description: Image file
         in: formData
         name: image
         required: true
         type: file
-      - description: JSON с опциями обработки
-        in: formData
-        name: options
-        type: string
-      produces:
-      - application/json
       responses:
         "202":
-          description: Изображение принято в обработку
+          description: Image accepted for processing
           schema:
-            $ref: '#/definitions/handlers.UploadResponse'
+            $ref: '#/definitions/handler.UploadResponse'
         "400":
-          description: Ошибка валидации
+          description: Validation error
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/handler.ErrorResponse'
         "413":
-          description: Файл слишком большой
+          description: File too large
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
+            $ref: '#/definitions/handler.ErrorResponse'
         "500":
-          description: Внутренняя ошибка
+          description: Internal error
           schema:
-            $ref: '#/definitions/handlers.ErrorResponse'
-      summary: Загрузить изображение
-      tags:
-      - Image
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: Upload an image
 swagger: "2.0"

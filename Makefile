@@ -1,155 +1,109 @@
-LOCAL_BIN := $(CURDIR)/bin
+PROJECT_NAME := img-processor
+MAIN_PACKAGE := ./cmd/img-processor
+BINARY_NAME := $(PROJECT_NAME)
+BINARY_PATH := ./bin/$(BINARY_NAME)
+
 BASE_STACK := docker compose -f docker-compose.yml
-INTEGRATION_TEST_STACK := docker compose --env-file .env -f tests/integration/docker-compose-integration-test.yml
-INTEGRATION_TEST_DIR := $(CURDIR)/tests/integration
-E2E_TEST_STACK := docker compose --env-file ../../.env -f tests/e2e/docker-compose-e2e.yml
-E2E_TEST_DIR := $(CURDIR)/tests/e2e
-ALL_STACK := $(BASE_STACK)
+LOCAL_ENV_FILE := .env
 
 .DEFAULT_GOAL := help
 
 .PHONY: help
 help: ## Display this help screen
-	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
+	@awk 'BEGIN {FS = ":.*##"; printf "\nUsage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-25s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n%[1]s\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
 
 .PHONY: deps
 deps: ## Tidy and verify Go modules
 	go mod tidy && go mod verify
 
-.PHONY: deps-audit
-deps-audit: ## Check dependencies for vulnerabilities using govulncheck (govulncheck is must be required)
-	govulncheck ./...
-
-.PHONY: bin-deps
-bin-deps: ## Install development tools (govulncheck, golangci-lint, gci, gofumpt, etc.)
-	@echo "Installing development tools..."
-	go install golang.org/x/vuln/cmd/govulncheck@latest
-	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0
-	go install github.com/daixiang0/gci@latest
-	go install mvdan.cc/gofumpt@latest
-	go install github.com/segmentio/golines@latest
-	go install golang.org/x/tools/cmd/goimports@latest
-	go install github.com/swaggo/swag/cmd/swag@latest
-	go install github.com/golang-migrate/migrate/v4/cmd/migrate@latest
-	go install github.com/vektra/mockery/v3@v3.5.5
-	@echo "Development tools installed."
-
-.PHONY: format
-format: ## Format code using gofumpt, gci, golines, goimports
-	@echo "Formatting code..."
-	gofumpt -l -w .
-	gci write . --skip-generated -s standard -s default
-	golines -w --max-len=120 .
-	goimports -w .
-	@echo "Code formatted."
-
-.PHONY: linter-golangci
-linter-golangci: ## Run golangci-lint linter
-	golangci-lint run
-
-.PHONY: linter-hadolint
-linter-hadolint: ## Run hadolint on Dockerfiles (requires hadolint installed)
-	hadolint Dockerfile
-
-.PHONY: linter-dotenv
-linter-dotenv: ## Run dotenv-linter on .env files (requires dotenv-linter installed)
-	dotenv-linter check -r .
-
-.PHONY: dotenv-fix
-dotenv-fix: ## Fix .env files (requires dotenv-linter installed)
-	dotenv-linter fix --no-backup -r .
-
-.PHONY: swag-v1
-swag-v1: ## Generate Swagger documentation
-	@echo "Generating Swagger documentation..."
-	swag init -g internal/transport/http/routes.go --output docs
-	@echo "Swagger documentation generated."
-
-.PHONY: mock
-mock: ## Generate mocks in target directories
-	@echo "Generating mocks..."
-	@echo "Mocks generated successfully:"
-
 .PHONY: run
-run: deps swag-v1 ## Run the application locally (requires dependencies like DB/Rabbit to be running)
+run: deps swagger ## Run the application locally (requires Kafka/MinIO)
 	@echo "Running application..."
-	go run -tags migrate ./cmd/ebooker -config=./configs/dev.env
+	go run $(MAIN_PACKAGE)
+
+.PHONY: build
+build: deps ## Build binary for linux/amd64
+	@echo "Building $(BINARY_NAME)..."
+	@mkdir -p $(BINARY_PATH)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o $(BINARY_PATH)/$(BINARY_NAME) $(MAIN_PACKAGE)
+	@echo "Binary built: $(BINARY_PATH)/$(BINARY_NAME)"
+
+.PHONY: build-local
+build-local: deps ## Build binary for local OS
+	@echo "Building for local OS..."
+	go build -o $(BINARY_NAME) $(MAIN_PACKAGE)
+	@echo "Binary built: $(BINARY_NAME)"
+
+.PHONY: build-docker
+build-docker: ## Build Docker image
+	@echo "Building Docker image..."
+	docker build -t $(PROJECT_NAME):latest .
+	@echo "Image built: $(PROJECT_NAME):latest"
+
+.PHONY: infra-up
+infra-up: ## Start infrastructure (Kafka + MinIO)
+	@echo "Starting Infrastructure..."
+	$(BASE_STACK) up -d
+	@echo "Infrastructure started."
+
+.PHONY: infra-down
+infra-down: ## Stop infrastructure
+	@echo "Stopping infrastructure..."
+	$(BASE_STACK) down
+	@echo "Infrastructure stopped"
+
+.PHONY: infra-logs
+infra-logs: ## Show logs for all infrastructure
+	@$(BASE_STACK) logs -f
 
 .PHONY: compose-up
-compose-up: ## Run infrastructure (db, redis, rabbitmq) only
-	$(BASE_STACK) up --build -d db redis rabbitmq
-	$(BASE_STACK) logs -f
-
-.PHONY: migrate-up
-migrate-db: ## Run migrations for db (requires db to be running)
-	$(BASE_STACK) --env-file .env up --build -d db-migrator
-	$(BASE_STACK) logs -f
-
-.PHONY: compose-up-all
-compose-up-all: ## Run all services (infrastructure + app + monitoring)
-	$(BASE_STACK) up --build -d
-	$(BASE_STACK) logs -f
+compose-up: ## Run all services (App + Infra)
+	@echo "Starting all services..."
+	$(BASE_STACK) up --build -d app
+	@echo "All services started"
+	@echo "Logs:"
+	$(BASE_STACK) logs -f --tail=50
 
 .PHONY: compose-down
-compose-down: ## Stop and remove all containers, networks, and volumes (from all stacks)
-	$(ALL_STACK) down --remove-orphans --volumes
-
-.PHONY: compose-logs
-compose-logs: ## Follow logs for all services
-	$(BASE_STACK) logs -f
-
-.PHONY: compose-logs-app
-compose-logs-app: ## Follow logs for the main application service
-	$(BASE_STACK) logs -f app
+compose-down: ## Stop and remove all containers and volumes
+	@echo "Stopping and cleaning..."
+	$(BASE_STACK) down --remove-orphans --volumes
+	@echo "Cleanup completed"
 
 .PHONY: test
 test: ## Run unit tests with race detector and coverage
 	@echo "Running unit tests..."
-	go clean -testcache
-	go test -v -race -covermode atomic -coverprofile=coverage_internal.txt ./internal/...
-	@echo "Unit tests completed."
+	go test -race -covermode=atomic -coverprofile=coverage.txt ./internal/... -v
+	@echo "Test results written to coverage.txt"
+	go tool cover -func=coverage.txt | tail -1
 
-.PHONY: integration-test
-integration-test: ## Run integration tests (requires Docker)
-	@echo "Running integration tests..."
-	$(INTEGRATION_TEST_STACK) up db -d
-	$(INTEGRATION_TEST_STACK) run --rm db-migrator
-	$(INTEGRATION_TEST_STACK) up integration-test --exit-code-from integration-test
-	$(INTEGRATION_TEST_STACK) down --remove-orphans --volumes
-	@echo "Integration tests completed."
+.PHONY: format
+format: ## Format code (gofmt, imports, line length)
+	@echo "Formatting..."
+	gofumpt -l -w .
+	gci write .
+	goimports -w .
+	golines -w --max-len=120 .
+	@echo "Code formatted"
+
+.PHONY: lint
+lint: ## Run linter
+	@echo "Running linter..."
+	golangci-lint run ./...
+	@echo "Lint passed"
+
+.PHONY: swagger
+swagger: ## Generate Swagger documentation
+	@echo "Generating Swagger docs..."
+	swag init -g cmd/img-processor/main.go --output docs
+	@echo "Swagger docs generated in docs/"
 
 .PHONY: pre-commit
-pre-commit: swag-v1 mock format linter-golangci linter-dotenv linter-hadolint test ## Run checks typically done before committing
-	@echo "Pre-commit checks passed."
-
-.PHONY: build
-build: deps ## Build the main application binary
-	@echo "Building application binary..."
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o ./bin/ebooker ./cmd/ebooker
-	@echo "Binary built: ./bin/ebooker"
-
-.PHONY: build-docker
-build-docker: ## Build main Docker image
-	@echo "Building main Docker image..."
-	docker build -t ebooker:latest .
-	@echo "Main Docker image built."
+pre-commit: format lint swagger ## Pre-commit hook
+	@echo "Pre-commit checks passed!"
 
 .PHONY: clean
-clean: ## Remove generated files and binaries
-	@echo "Cleaning up..."
-	rm -rf ./bin/
-	rm -rf ./docs/ # Swagger docs
-	find . -name "*mock*" -type f -path "*/mock/*" -delete
-	@echo "Cleanup completed."
-
-.PHONY: docker-prune
-docker-prune: ## Remove unused Docker data (stopped containers, networks, images, build cache)
-	@echo "Pruning Docker data..."
-	docker system prune -af
-	@echo "Docker data pruned."
-
-.PHONY: docker-rm-volume
-docker-rm-volume: ## Remove Docker volume (example for pgdata)
-	@echo "Removing Docker volume 'pgdata'..."
-	docker volume rm l0_pgdata
-	@echo "Volume removal attempted."
+clean: ## Clean build artifacts and docs
+	@echo "Cleaning..."
+	rm -rf $(BINARY_PATH) ./docs/* ./coverage.txt
+	@echo "Cleanup done"

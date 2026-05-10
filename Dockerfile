@@ -1,4 +1,4 @@
-FROM golang:1.25.7-alpine AS go-builder
+FROM golang:1.26.1-alpine AS go-builder
 
 WORKDIR /app
 
@@ -9,15 +9,15 @@ RUN go mod download && go mod verify
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
-    go build -a -installsuffix cgo -o ./bin/ebooker ./cmd/ebooker/main.go
+    go build -a -installsuffix cgo -o ./bin/img-processor ./cmd/img-processor/main.go
 
 FROM alpine:3.22
 
 COPY --from=go-builder /app/configs /app/configs
-COPY --from=go-builder /app/migrations /app/migrations
+COPY --from=go-builder /app/assets /app/assets
 COPY --from=go-builder /app/docs /app/docs
 COPY --from=go-builder /app/web /web
 
-COPY --from=go-builder /app/bin/ebooker /ebooker
+COPY --from=go-builder /app/bin/img-processor /img-processor
 
-ENTRYPOINT ["/ebooker"]
+ENTRYPOINT ["/img-processor"]

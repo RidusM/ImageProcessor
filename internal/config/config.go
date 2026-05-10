@@ -7,6 +7,7 @@ type (
 		App     App     `env-prefix:"APP_"`
 		Service Service `env-prefix:"SERVICE_"`
 		Storage Storage `env-prefix:"STORAGE_"`
+		Kafka   Kafka   `env-prefix:"KAFKA_"`
 		HTTP    HTTP    `env-prefix:"HTTP_"`
 		Logger  Logger  `env-prefix:"LOGGER_"`
 		Env     string  `                      env:"ENV" env-default:"local" validate:"oneof=local dev staging prod"`
@@ -18,14 +19,14 @@ type (
 	}
 
 	Service struct {
-		MaxFileSizeMB   int64  `env:"MAX_FILE_SIZE_MB" env-default:"32"                     validate:"min=1,max=100"`
-		WatermarkPath   string `env:"WATERMARK_PATH"   env-default:"./assets/watermark.png"`
-		WorkerCount     int    `env:"WORKER_COUNT"     env-default:"4"                      validate:"min=1,max=16"`
-		QueueSize       int    `env:"QUEUE_SIZE"       env-default:"100"                    validate:"min=10,max=1000"`
-		MaxWidth        int    `env:"MAX_WIDTH"        env-default:"1920"                   validate:"min=100,max=4096"`
-		ThumbSize       int    `env:"THUMB_SIZE"       env-default:"300"                    validate:"min=50,max=1000"`
-		JPEGQuality     int    `env:"JPEG_QUALITY"     env-default:"90"                     validate:"min=1,max=100"`
-		EnableWatermark bool   `env:"ENABLE_WATERMARK" env-default:"true"`
+		MaxFileSizeMB   int64         `env:"MAX_FILE_SIZE_MB" env-default:"32"                     validate:"min=1,max=100"`
+		WatermarkPath   string        `env:"WATERMARK_PATH"   env-default:"./assets/watermark.png"`
+		MaxWidth        int           `env:"MAX_WIDTH"        env-default:"1920"                   validate:"min=100,max=4096"`
+		ThumbSize       int           `env:"THUMB_SIZE"       env-default:"300"                    validate:"min=50,max=1000"`
+		JPEGQuality     int           `env:"JPEG_QUALITY"     env-default:"90"                     validate:"min=1,max=100"`
+		EnableWatermark bool          `env:"ENABLE_WATERMARK" env-default:"true"`
+		CleanupMaxAge   time.Duration `env:"CLEANUP_MAX_AGE"  env-default:"168h"                   validate:"gte=1h"`
+		CleanupInterval time.Duration `env:"CLEANUP_INTERVAL" env-default:"30m"                    validate:"gte=30m,lte=2h"`
 	}
 
 	Storage struct {
@@ -38,6 +39,16 @@ type (
 		MinIOBucket    string `env:"MINIO_BUCKET"     env-default:"img-processor"`
 		MinIOUseSSL    bool   `env:"MINIO_USE_SSL"    env-default:"false"`
 		MinIORegion    string `env:"MINIO_REGION"     env-default:"us-east-1"`
+	}
+
+	Kafka struct {
+		Brokers        []string      `env:"BROKERS"          validate:"min=1,dive,hostname_port" env-separator:","`
+		Topic          string        `env:"TOPIC"            validate:"required"                                   env-default:"image-processing"`
+		GroupID        string        `env:"GROUP_ID"         validate:"required"                                   env-default:"img-processor-workers"`
+		DLQTopic       string        `env:"DLQ_TOPIC"                                                              env-default:"image-processing-dlq"`
+		MaxAttempts    int           `env:"MAX_ATTEMPTS"     validate:"min=1,max=10"                               env-default:"3"`
+		BaseRetryDelay time.Duration `env:"BASE_RETRY_DELAY" validate:"gte=10ms"                                   env-default:"500ms"`
+		MaxRetryDelay  time.Duration `env:"MAX_RETRY_DELAY"  validate:"gte=1s"                                     env-default:"5s"`
 	}
 
 	HTTP struct {

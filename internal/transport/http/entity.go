@@ -1,17 +1,42 @@
-package handlers
+//nolint:revive,staticcheck
+package handler
 
-import "time"
+import (
+	"mime/multipart"
+	"time"
 
-type UploadResponse struct {
-	ID       string `json:"id"       example:"a1b2c3d4e5f6"`
-	Status   string `json:"status"   example:"pending"`
-	Filename string `json:"filename" example:"photo.jpg"`
-	Size     int64  `json:"size"     example:"2048576"`
-	Message  string `json:"message"  example:"Image uploaded successfully"`
+	"github.com/google/uuid"
+)
+
+// swagger:model UploadRequest
+type UploadRequest struct {
+	File     *multipart.FileHeader `form:"file"      binding:"required"`
+	ClientID uuid.UUID             `form:"client_id"                    validate:"required,uuid"`
+	Options  *ProcessingOptions    `form:"options"`
 }
 
+type ProcessingOptions struct {
+	ResizeWidth      int    `form:"resize_width"      validate:"gte=0"`
+	ResizeHeight     int    `form:"resize_height"     validate:"gte=0"`
+	ThumbnailSize    int    `form:"thumbnail_size"    validate:"gte=0"`
+	AddWatermark     bool   `form:"add_watermark"`
+	ConvertTo        string `form:"convert_to"        validate:"omitempty,oneof=jpg jpeg png webp gif"`
+	Quality          int    `form:"quality"           validate:"min=1,max=100"`
+	PreserveMetadata bool   `form:"preserve_metadata"`
+}
+
+// swagger:model UploadResponse
+type UploadResponse struct {
+	ID       uuid.UUID `json:"id"       example:"550e8400-e29b-41d4-a716-446655440002"`
+	Status   string    `json:"status"   example:"pending"`
+	Filename string    `json:"filename" example:"photo.jpg"`
+	Size     int64     `json:"size"     example:"2048576"`
+	Message  string    `json:"message"  example:"Image uploaded successfully"`
+}
+
+// swagger:model ImageStatusResponse
 type ImageStatusResponse struct {
-	ID        string     `json:"id"                   example:"a1b2c3d4e5f6"`
+	ID        uuid.UUID  `json:"id"                   example:"550e8400-e29b-41d4-a716-446655440002"`
 	Filename  string     `json:"filename,omitempty"   example:"photo.jpg"`
 	Status    string     `json:"status"               example:"processing"`
 	Progress  int        `json:"progress"             example:"45"`
@@ -20,13 +45,20 @@ type ImageStatusResponse struct {
 	UpdatedAt *time.Time `json:"updated_at,omitempty" example:"2024-01-15T10:30:05Z"`
 }
 
+// swagger:model ErrorResponse
 type ErrorResponse struct {
 	Error   string `json:"error"             example:"image not found"`
 	Code    string `json:"code,omitempty"    example:"not_found"`
-	Details string `json:"details,omitempty" example:"image with id abc123 does not exist"`
+	Details string `json:"details,omitempty" example:"image with name photo1 does not exist"`
 }
 
+// swagger:model SuccessResponse
+type SuccessResponse struct {
+	Message string `json:"message" example:"Operation completed successfully"`
+}
+
+// swagger:model HealthResponse
 type HealthResponse struct {
-	Status string `json:"status" example:"ok"`
-	Time   string `json:"time"   example:"2024-01-15T10:30:00Z"`
+	Status string    `json:"status" example:"ok"`
+	Time   time.Time `json:"time"   example:"2026-05-08T06:04:15Z"`
 }

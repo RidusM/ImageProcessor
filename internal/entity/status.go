@@ -1,18 +1,14 @@
 package entity
 
-type TaskStatus string
+type Status string
 
 const (
-	TaskStatusPending    TaskStatus = "pending"
-	TaskStatusProcessing TaskStatus = "processing"
-	TaskStatusDone       TaskStatus = "done"
-	TaskStatusError      TaskStatus = "error"
+	StatusPending    Status = "pending"
+	StatusProcessing Status = "processing"
+	StatusDone       Status = "done"
+	StatusError      Status = "error"
 )
 
-func (s TaskStatus) String() string {
-	return string(s)
-}
-
-func (s TaskStatus) IsTerminal() bool {
-	return s == TaskStatusDone || s == TaskStatusError
+func (s Status) IsTerminal() bool {
+	return s == StatusDone || s == StatusError
 }

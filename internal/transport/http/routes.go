@@ -1,7 +1,7 @@
-package handlers
+package handler
 
 import (
-	"net/http"
+	_ "img-processor/docs" // required for Swagger
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -27,7 +27,7 @@ func (h *ImageHandler) setupRoutes() {
 	h.router.DELETE("/image/:id", h.DeleteImage)
 
 	h.router.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "index.html", gin.H{})
+		c.File("web/index.html")
 	})
 
 	h.router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

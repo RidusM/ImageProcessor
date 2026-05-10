@@ -1,4 +1,4 @@
-package handlers
+package handler
 
 import (
 	"net/http"
@@ -37,32 +37,19 @@ func (h *ImageHandler) loggingMiddleware() gin.HandlerFunc {
 	}
 }
 
-func (h *ImageHandler) corsMiddleware(allowedOrigins []string) gin.HandlerFunc {
+func (h *ImageHandler) baseCORSMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		origin := c.Request.Header.Get("Origin")
-		if origin != "" && isOriginAllowed(origin, allowedOrigins) {
-			c.Header("Access-Control-Allow-Origin", origin)
-			c.Header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-			c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
-			c.Header("Access-Control-Max-Age", "86400")
-		}
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().
+			Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, accept, origin, Cache-Control, X-Requested-With, X-Request-ID")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, DELETE")
 
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
+
 		c.Next()
 	}
-}
-
-func isOriginAllowed(origin string, allowed []string) bool {
-	if len(allowed) == 0 {
-		return true
-	}
-	for _, a := range allowed {
-		if a == "*" || a == origin {
-			return true
-		}
-	}
-	return false
 }

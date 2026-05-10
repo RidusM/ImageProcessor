@@ -1,4 +1,4 @@
-package handlers
+package handler
 
 import (
 	"context"
@@ -40,7 +40,7 @@ func NewHTTPServer(
 }
 
 func (s *HTTPServer) Start(ctx context.Context) error {
-	const op = "transport.http.HTTPServer.Start"
+	const op = "transport.handler.HTTPServer.Start"
 
 	eg, ctx := errgroup.WithContext(ctx)
 
@@ -66,7 +66,7 @@ func (s *HTTPServer) Start(ctx context.Context) error {
 }
 
 func (s *HTTPServer) Stop(ctx context.Context) error {
-	const op = "transport.http.HTTPServer.Stop"
+	const op = "transport.handler.HTTPServer.Stop"
 
 	shutdownCtx, cancel := context.WithTimeout(ctx, s.shutdownTimeout)
 	defer cancel()
@@ -76,7 +76,7 @@ func (s *HTTPServer) Stop(ctx context.Context) error {
 		s.log.LogAttrs(ctx, logger.ErrorLevel, "HTTP server forced shutdown",
 			logger.Any("error", err),
 		)
-		return fmt.Errorf("%s: server shutdown: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
 	s.log.LogAttrs(ctx, logger.InfoLevel, "HTTP server stopped gracefully")
 	return nil

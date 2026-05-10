@@ -1,20 +1,24 @@
 package entity
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type Image struct {
-	ID            string     `json:"id"`
-	OriginalName  string     `json:"original_name"`
-	Extension     string     `json:"extension"`
-	Size          int64      `json:"size"`
-	MimeType      string     `json:"mime_type"`
-	OriginalPath  string     `json:"-"`
-	ProcessedPath string     `json:"-"`
-	ThumbnailPath string     `json:"-"`
-	Width         int        `json:"width,omitempty"`
-	Height        int        `json:"height,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	ProcessedAt   *time.Time `json:"processed_at,omitempty"`
+	ID            uuid.UUID
+	OriginalName  string
+	Extension     string
+	Size          int64
+	MimeType      string
+	OriginalPath  string
+	ProcessedPath string
+	ThumbnailPath string
+	Width         int
+	Height        int
+	CreatedAt     time.Time
+	ProcessedAt   *time.Time
 }
 
 type ImagePaths struct {
