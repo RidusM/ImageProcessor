@@ -27,6 +27,12 @@ type ImagePaths struct {
 	Thumbnail string
 }
 
+type ImageMeta struct {
+	ID           uuid.UUID
+	Ext          string
+	OriginalName string
+}
+
 func SupportedExtensions() []string {
 	return []string{"jpg", "jpeg", "png", "gif", "webp"}
 }

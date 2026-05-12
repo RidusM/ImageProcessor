@@ -40,8 +40,16 @@ func (r *ImageRepository) SaveOriginal(
 	id uuid.UUID,
 	ext string,
 	src io.Reader,
+	originalName string,
 ) (string, error) {
-	return r.upload(ctx, _subdirOriginal, id, ext, src, "SaveOriginal")
+	key, err := r.upload(ctx, _subdirOriginal, id, ext, src, "SaveOriginal")
+	if err != nil {
+		return "", err
+	}
+
+	nameKey := _subdirOriginal + "/" + id.String() + ".name"
+	_ = r.store.Put(ctx, nameKey, strings.NewReader(originalName), "text/plain")
+	return key, nil
 }
 
 func (r *ImageRepository) SaveProcessed(
@@ -117,11 +125,134 @@ func (r *ImageRepository) Exists(
 	ext string,
 ) (bool, error) {
 	const op = "repository.Exists"
-	ok, err := r.store.Exists(ctx, r.key(_subdirOriginal, id, ext)) // ← original
+	ok, err := r.store.Exists(ctx, r.key(_subdirOriginal, id, ext))
 	if err != nil {
 		return false, fmt.Errorf("%s: %w", op, err)
 	}
 	return ok, nil
+}
+
+func (r *ImageRepository) List(ctx context.Context) ([]entity.ImageMeta, error) {
+	const op = "repository.List"
+
+	if localStore, ok := r.store.(interface{ Root() string }); ok {
+		return r.listLocal(ctx, localStore.Root())
+	}
+	if minioStore, ok := r.store.(interface {
+		ListObjects(ctx context.Context, prefix string) ([]string, error)
+	}); ok {
+		return r.listMinio(ctx, minioStore)
+	}
+	return nil, fmt.Errorf("%s: listing not supported for this storage type", op)
+}
+
+func (r *ImageRepository) listLocal(ctx context.Context, root string) ([]entity.ImageMeta, error) {
+	const op = "repository.listLocal"
+
+	originalsDir := filepath.Join(root, _subdirOriginal)
+	entries, err := os.ReadDir(originalsDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []entity.ImageMeta{}, nil
+		}
+		return nil, fmt.Errorf("%s: read dir: %w", op, err)
+	}
+
+	var result []entity.ImageMeta
+	for _, entry := range entries {
+		meta, ok := r.parseLocalEntry(ctx, entry)
+		if !ok {
+			continue
+		}
+		result = append(result, meta)
+	}
+	return result, nil
+}
+
+func (r *ImageRepository) parseLocalEntry(ctx context.Context, entry os.DirEntry) (entity.ImageMeta, bool) {
+	if entry.IsDir() {
+		return entity.ImageMeta{}, false
+	}
+
+	idStr, ext, err := parseFilename(entry.Name())
+	if err != nil {
+		return entity.ImageMeta{}, false
+	}
+
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return entity.ImageMeta{}, false
+	}
+
+	name := r.readOriginalName(ctx, idStr)
+	return entity.ImageMeta{
+		ID:           id,
+		Ext:          strings.TrimPrefix(ext, "."),
+		OriginalName: name,
+	}, true
+}
+
+func (r *ImageRepository) readOriginalName(ctx context.Context, idStr string) string {
+	nameKey := _subdirOriginal + "/" + idStr + ".name"
+	rc, _, err := r.store.Get(ctx, nameKey)
+	if err != nil {
+		return ""
+	}
+	defer func() {
+		if closeErr := rc.Close(); closeErr != nil {
+			r.log.LogAttrs(ctx, logger.WarnLevel, "failed to close name reader",
+				logger.Any("error", closeErr),
+			)
+		}
+	}()
+
+	b, err := io.ReadAll(rc)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+func (r *ImageRepository) listMinio(ctx context.Context, store interface {
+	ListObjects(ctx context.Context, prefix string) ([]string, error)
+},
+) ([]entity.ImageMeta, error) {
+	const op = "repository.listMinio"
+
+	keys, err := store.ListObjects(ctx, _subdirOriginal+"/")
+	if err != nil {
+		return nil, fmt.Errorf("%s: list objects: %w", op, err)
+	}
+
+	var result []entity.ImageMeta
+	for _, key := range keys {
+		meta, ok := r.parseMinioKey(ctx, key)
+		if !ok {
+			continue
+		}
+		result = append(result, meta)
+	}
+	return result, nil
+}
+
+func (r *ImageRepository) parseMinioKey(ctx context.Context, key string) (entity.ImageMeta, bool) {
+	name := filepath.Base(key)
+	idStr, ext, err := parseFilename(name)
+	if err != nil {
+		return entity.ImageMeta{}, false
+	}
+
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		return entity.ImageMeta{}, false
+	}
+
+	originalName := r.readOriginalName(ctx, idStr)
+	return entity.ImageMeta{
+		ID:           id,
+		Ext:          strings.TrimPrefix(ext, "."),
+		OriginalName: originalName,
+	}, true
 }
 
 func (r *ImageRepository) Cleanup(ctx context.Context, maxAge time.Duration) (int, error) {

@@ -192,6 +192,32 @@ const docTemplate = `{
                 }
             }
         },
+        "/images": {
+            "delete": {
+                "description": "Get the images and all they versions (original, processed, thumbnail)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Image"
+                ],
+                "summary": "List images",
+                "responses": {
+                    "200": {
+                        "description": "Images find"
+                    },
+                    "500": {
+                        "description": "Internal error",
+                        "schema": {
+                            "$ref": "#/definitions/handler.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/upload": {
             "post": {
                 "description": "Uploads an image for processing (resize, thumbnail, watermark)",

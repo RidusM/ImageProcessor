@@ -24,6 +24,7 @@ func (h *ImageHandler) setupRoutes() {
 	h.router.POST("/upload", h.UploadImage)
 	h.router.GET("/image/:id", h.GetImage)
 	h.router.GET("/image/:id/status", h.GetStatus)
+	h.router.GET("/images", h.ListImages)
 	h.router.DELETE("/image/:id", h.DeleteImage)
 
 	h.router.GET("/", func(c *gin.Context) {

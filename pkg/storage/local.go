@@ -75,3 +75,7 @@ func (s *LocalStorage) Exists(_ context.Context, key string) (bool, error) {
 	}
 	return false, fmt.Errorf("local exists: %w", err)
 }
+
+func (s *LocalStorage) Root() string {
+	return s.root
+}

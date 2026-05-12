@@ -25,7 +25,7 @@ const (
 
 type (
 	ImageRepository interface {
-		SaveOriginal(ctx context.Context, id uuid.UUID, ext string, src io.Reader) (string, error)
+		SaveOriginal(ctx context.Context, id uuid.UUID, ext string, src io.Reader, originalName string) (string, error)
 		SaveProcessed(ctx context.Context, id uuid.UUID, ext string, src io.Reader) (string, error)
 		SaveThumbnail(ctx context.Context, id uuid.UUID, ext string, src io.Reader) (string, error)
 		GetOriginal(ctx context.Context, id uuid.UUID, ext string) (io.ReadCloser, int64, error)
@@ -33,6 +33,7 @@ type (
 		GetThumbnail(ctx context.Context, id uuid.UUID, ext string) (io.ReadCloser, int64, error)
 		Delete(ctx context.Context, id uuid.UUID, ext string) error
 		Exists(ctx context.Context, id uuid.UUID, ext string) (bool, error)
+		List(ctx context.Context) ([]entity.ImageMeta, error)
 	}
 
 	ImageProcessor interface {
@@ -57,6 +58,14 @@ type (
 		Filename string
 		Size     int64
 		Message  string
+	}
+
+	ImageListItem struct {
+		ID           uuid.UUID
+		Ext          string
+		OriginalName string
+		Status       string
+		Progress     int
 	}
 
 	ProcessorService struct {
@@ -137,7 +146,7 @@ func (s *ProcessorService) Upload(ctx context.Context, req UploadRequest) (*Uplo
 	}
 	defer file.Close()
 
-	if _, err = s.repo.SaveOriginal(ctx, imageID, ext, file); err != nil {
+	if _, err = s.repo.SaveOriginal(ctx, imageID, ext, file, req.File.Filename); err != nil {
 		return nil, fmt.Errorf("%s: save original: %w", op, err)
 	}
 
@@ -241,6 +250,35 @@ func (s *ProcessorService) GetImage(
 	}
 
 	return reader, size, ext, nil
+}
+
+func (s *ProcessorService) ListImages(ctx context.Context) ([]ImageListItem, error) {
+	const op = "service.ListImages"
+
+	metas, err := s.repo.List(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	result := make([]ImageListItem, 0, len(metas))
+	for _, m := range metas {
+		item := ImageListItem{
+			ID:  m.ID,
+			Ext: m.Ext,
+		}
+		if val, ok := s.statuses.Load(m.ID.String()); ok {
+			var task *entity.Task
+			if task, ok = val.(*entity.Task); ok {
+				item.Status = string(task.Status)
+				item.Progress = task.Progress
+			}
+		} else {
+			item.Status = string(entity.StatusDone)
+			item.Progress = 100
+		}
+		result = append(result, item)
+	}
+	return result, nil
 }
 
 func (s *ProcessorService) Delete(ctx context.Context, imageID uuid.UUID) error {
@@ -367,7 +405,9 @@ func (s *ProcessorService) saveProcessed(ctx context.Context, task *entity.Task,
 		current = resized
 	}
 
-	if task.Options != nil && task.Options.AddWatermark && s.enableWatermark && s.watermarkPath != "" {
+	addWatermark := s.enableWatermark && s.watermarkPath != "" &&
+		(task.Options == nil || task.Options.AddWatermark)
+	if addWatermark {
 		var watermarked io.Reader
 		watermarked, err = s.processor.AddWatermark(ctx, current, ext, s.watermarkPath)
 		if err != nil {
@@ -379,6 +419,11 @@ func (s *ProcessorService) saveProcessed(ctx context.Context, task *entity.Task,
 	if _, err = s.repo.SaveProcessed(ctx, task.ImageID, ext, current); err != nil {
 		return fmt.Errorf("save processed: %w", err)
 	}
+
+	s.log.LogAttrs(ctx, logger.InfoLevel, "task options",
+		logger.Any("options", task.Options),
+		logger.String("ext", ext),
+	)
 
 	task.Progress = 90
 	return nil

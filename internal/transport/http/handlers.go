@@ -2,6 +2,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -31,27 +32,32 @@ import (
 func (h *ImageHandler) UploadImage(c *gin.Context) {
 	ctx := c.Request.Context()
 
-	var req UploadRequest
-	if err := c.ShouldBind(&req); err != nil {
-		h.respondError(c, http.StatusBadRequest, "bind_error", "Invalid request format", err)
+	file, err := c.FormFile("file")
+	if err != nil {
+		h.respondError(c, http.StatusBadRequest, "bind_error", "Image file is required", err)
 		return
 	}
 
-	serviceReq := service.UploadRequest{
-		File:    req.File,
-		Options: &entity.ProcessingOptions{},
+	var procOpts ProcessingOptions
+	if raw := c.PostForm("options"); raw != "" {
+		if err = json.Unmarshal([]byte(raw), &procOpts); err != nil {
+			h.respondError(c, http.StatusBadRequest, "bind_error", "Invalid options format", err)
+			return
+		}
 	}
 
-	if req.Options != nil {
-		serviceReq.Options = &entity.ProcessingOptions{
-			ResizeWidth:      req.Options.ResizeWidth,
-			ResizeHeight:     req.Options.ResizeHeight,
-			ThumbnailSize:    req.Options.ThumbnailSize,
-			AddWatermark:     req.Options.AddWatermark,
-			ConvertTo:        req.Options.ConvertTo,
-			Quality:          req.Options.Quality,
-			PreserveMetadata: req.Options.PreserveMetadata,
-		}
+	serviceReq := service.UploadRequest{
+		File: file,
+	}
+
+	serviceReq.Options = &entity.ProcessingOptions{
+		ResizeWidth:      procOpts.ResizeWidth,
+		ResizeHeight:     procOpts.ResizeHeight,
+		ThumbnailSize:    procOpts.ThumbnailSize,
+		AddWatermark:     procOpts.AddWatermark,
+		ConvertTo:        procOpts.ConvertTo,
+		Quality:          procOpts.Quality,
+		PreserveMetadata: procOpts.PreserveMetadata,
 	}
 
 	image, err := h.svc.Upload(ctx, serviceReq)
@@ -92,7 +98,7 @@ func (h *ImageHandler) GetImage(c *gin.Context) {
 	idStr := c.Param("id")
 	imageID, err := uuid.Parse(idStr)
 	if err != nil {
-		h.respondError(c, http.StatusBadRequest, "invalid_id", "Invalid notification ID format", err)
+		h.respondError(c, http.StatusBadRequest, "invalid_id", "Invalid ID format", err)
 		return
 	}
 
@@ -146,7 +152,7 @@ func (h *ImageHandler) GetStatus(c *gin.Context) {
 	idStr := c.Param("id")
 	imageID, err := uuid.Parse(idStr)
 	if err != nil {
-		h.respondError(c, http.StatusBadRequest, "invalid_id", "Invalid notification ID format", err)
+		h.respondError(c, http.StatusBadRequest, "invalid_id", "Invalid ID format", err)
 		return
 	}
 
@@ -177,6 +183,24 @@ func (h *ImageHandler) GetStatus(c *gin.Context) {
 	h.respondJSON(c, statusCode, response)
 }
 
+// @Summary List images
+// @Description Get the images and all they versions (original, processed, thumbnail)
+// @Tags Image
+// @Accept json
+// @Produce json
+// @Success 200 "Images find"
+// @Failure 500 {object} ErrorResponse "Internal error"
+// @Router /images [get]
+func (h *ImageHandler) ListImages(c *gin.Context) {
+	ctx := c.Request.Context()
+	images, err := h.svc.ListImages(ctx)
+	if err != nil {
+		h.handleServiceError(c, err)
+		return
+	}
+	h.respondJSON(c, http.StatusOK, images)
+}
+
 // @Summary Delete image
 // @Description Deletes the image and all its versions (original, processed, thumbnail)
 // @Tags Image
@@ -193,7 +217,7 @@ func (h *ImageHandler) DeleteImage(c *gin.Context) {
 	idStr := c.Param("id")
 	imageID, err := uuid.Parse(idStr)
 	if err != nil {
-		h.respondError(c, http.StatusBadRequest, "invalid_id", "Invalid notification ID format", err)
+		h.respondError(c, http.StatusBadRequest, "invalid_id", "Invalid ID format", err)
 		return
 	}
 

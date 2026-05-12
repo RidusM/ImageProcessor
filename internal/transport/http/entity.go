@@ -16,13 +16,13 @@ type UploadRequest struct {
 }
 
 type ProcessingOptions struct {
-	ResizeWidth      int    `form:"resize_width"      validate:"gte=0"`
-	ResizeHeight     int    `form:"resize_height"     validate:"gte=0"`
-	ThumbnailSize    int    `form:"thumbnail_size"    validate:"gte=0"`
-	AddWatermark     bool   `form:"add_watermark"`
-	ConvertTo        string `form:"convert_to"        validate:"omitempty,oneof=jpg jpeg png webp gif"`
-	Quality          int    `form:"quality"           validate:"min=1,max=100"`
-	PreserveMetadata bool   `form:"preserve_metadata"`
+	ResizeWidth      int    `json:"resize_width"`
+	ResizeHeight     int    `json:"resize_height"`
+	ThumbnailSize    int    `json:"thumbnail_size"`
+	AddWatermark     bool   `json:"add_watermark"`
+	ConvertTo        string `json:"convert_to"`
+	Quality          int    `json:"quality"`
+	PreserveMetadata bool   `json:"preserve_metadata"`
 }
 
 // swagger:model UploadResponse

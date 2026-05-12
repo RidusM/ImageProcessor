@@ -19,6 +19,7 @@ type ImageService interface {
 	Upload(ctx context.Context, req service.UploadRequest) (*service.UploadResponse, error)
 	GetStatus(ctx context.Context, imageID uuid.UUID) (*entity.Task, error)
 	GetImage(ctx context.Context, imageID uuid.UUID, version string) (io.ReadCloser, int64, string, error)
+	ListImages(ctx context.Context) ([]service.ImageListItem, error)
 	ProcessTask(ctx context.Context, task *entity.Task) error
 	Delete(ctx context.Context, imageID uuid.UUID) error
 }

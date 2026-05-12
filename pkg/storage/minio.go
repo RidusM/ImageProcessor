@@ -26,10 +26,20 @@ func NewMinIO(cfg config.Storage) (*MinIOStorage, error) {
 		return nil, fmt.Errorf("minio init: %w", err)
 	}
 
-	return &MinIOStorage{
-		client: client,
-		bucket: cfg.MinIOBucket,
-	}, nil
+	ctx := context.Background()
+	exists, err := client.BucketExists(ctx, cfg.MinIOBucket)
+	if err != nil {
+		return nil, fmt.Errorf("check bucket: %w", err)
+	}
+	if !exists {
+		if err = client.MakeBucket(ctx, cfg.MinIOBucket, minio.MakeBucketOptions{
+			Region: cfg.MinIORegion,
+		}); err != nil {
+			return nil, fmt.Errorf("create bucket %q: %w", cfg.MinIOBucket, err)
+		}
+	}
+
+	return &MinIOStorage{client: client, bucket: cfg.MinIOBucket}, nil
 }
 
 func (s *MinIOStorage) Put(
@@ -63,6 +73,20 @@ func (s *MinIOStorage) Get(
 	}
 
 	return obj, stat.Size, nil
+}
+
+func (s *MinIOStorage) ListObjects(ctx context.Context, prefix string) ([]string, error) {
+	var keys []string
+	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	}) {
+		if obj.Err != nil {
+			return nil, fmt.Errorf("minio list: %w", obj.Err)
+		}
+		keys = append(keys, obj.Key)
+	}
+	return keys, nil
 }
 
 func (s *MinIOStorage) Delete(

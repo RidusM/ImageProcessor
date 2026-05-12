@@ -184,6 +184,23 @@ paths:
       summary: Get the processing status
       tags:
       - Image
+  /images:
+    delete:
+      consumes:
+      - application/json
+      description: Get the images and all they versions (original, processed, thumbnail)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Images find
+        "500":
+          description: Internal error
+          schema:
+            $ref: '#/definitions/handler.ErrorResponse'
+      summary: List images
+      tags:
+      - Image
   /upload:
     post:
       consumes:

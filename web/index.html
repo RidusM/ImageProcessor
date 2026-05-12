@@ -321,11 +321,17 @@
         items[id] = { ...prev, status: data.status, progress: data.progress ?? prev.progress };
         renderCard(id);
         if (data.status === 'done' || data.status === 'error') {
-          clearInterval(pollers[id]);
-          delete pollers[id];
-          if (data.status === 'done') { toast('Обработка завершена', 'ok'); loadThumb(id); }
-          else toast('Ошибка обработки', 'err');
-        }
+        clearInterval(pollers[id]);
+        delete pollers[id];
+        if (data.status === 'done') {
+            toast('Обработка завершена', 'ok');
+            items[id] = { ...items[id], status: data.status, progress: data.progress ?? 100 };
+            renderCard(id);                      
+            setTimeout(() => loadThumb(id), 50);
+    }   else {
+            toast('Ошибка обработки', 'err');
+    }
+}
       } catch {}
     }, 2000);
   }
@@ -416,8 +422,10 @@
     const a = document.createElement('a');
     a.href = `/image/${id}?version=${item.version}&t=${Date.now()}`;
     a.download = `${item.filename}_${item.version}`;
+    document.body.appendChild(a);
     a.click();
-  }
+    document.body.removeChild(a);
+}
 
   async function deleteImg(id) {
     if (pollers[id]) { clearInterval(pollers[id]); delete pollers[id]; }
@@ -426,6 +434,36 @@
     renderGrid();
     toast('Изображение удалено', 'info');
   }
+
+  async function loadExistingImages() {
+    try {
+        const res = await fetch('/images');
+        if (!res.ok) return;
+        const list = await res.json();
+        if (!list || !list.length) return;
+       list.forEach(img => {
+    if (items[img.ID]) return;
+    items[img.ID] = {
+        id: img.ID,
+        filename: img.OriginalName || img.filename || img.Filename || img.ID,
+        status: img.Status,
+        progress: img.Progress,
+        version: 'processed',
+    };
+            if (img.Status === 'pending' || img.Status === 'processing') {
+                startPolling(img.ID);
+            }
+        });
+        renderGrid();
+        Object.keys(items).forEach(id => {
+            if (items[id].status === 'done') {
+                setTimeout(() => loadThumb(id), 100);
+            }
+        });
+    } catch {}
+}
+
+loadExistingImages();
 
   function toast(msg, type = 'info') {
     const el = document.createElement('div');
